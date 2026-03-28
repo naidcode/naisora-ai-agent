@@ -122,6 +122,15 @@ async function handleSentiment(lead, replyText, analysis) {
       .eq('id', lead.id);
 
     console.log(`   🔥 HOT LEAD — Telegram alert sent!`);
+     // Auto-generate intelligence report for interested leads
+    const { triggerForReply } = require('../intelligence/clientIntelligence');
+    triggerForReply(lead.id).catch(err => console.error('Intel report failed:', err.message));
+
+    // Re-score lead to 95
+    await supabase
+      .from('leads')
+      .update({ lead_score: 95, lead_category: 'hot' })
+      .eq('id', lead.id);
 
   } else if (sentiment === SENTIMENTS.HAS_QUESTION) {
     // Send them the suggested response via WhatsApp

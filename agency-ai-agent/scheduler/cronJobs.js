@@ -21,7 +21,11 @@ const { generateDailyPriorities, weeklyPipelineSummary } = require('../modules/o
 const { runInstagramOutreach } = require('../modules/outreach/instagramOutreach');
 const { runLinkedInOutreach } = require('../modules/outreach/linkedinOutreach');
 
-// ─── Helper: wrap any job in error handling ───────────────────────────────────
+// ─── Week 4 imports ────────────────────────────────────────────────
+const { scrapeEmailsForLeads } = require('../modules/scraper/emailScraper');
+const { auditWarmLeads } = require('../modules/seo/seoAudit');
+const { publishApprovedDrafts } = require('../modules/wordpress/blogPublisher');
+
 function safeJob(name, fn) {
   return async () => {
     try {
@@ -127,6 +131,27 @@ function startAllJobs() {
   console.log('🤖 Agent is running. All jobs scheduled.');
   console.log('📱 You will receive Telegram alerts for all activity.');
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+
+    // ── EMAIL SCRAPER — 10 AM (Tue, Thu) ─────────────────────────────────────
+  // Scrapes emails from websites of leads that have sites
+  cron.schedule('0 10 * * 2,4', safeJob('Email Scraper', async () => {
+    await scrapeEmailsForLeads(30);
+  }));
+  console.log('✅ 10:00 AM — Email scraper (Tue/Thu, 30 leads)');
+
+  // ── SEO AUDIT — 11 AM (Tue, Thu) ─────────────────────────────────────────
+  // Audits websites of warm leads — generates score for cold emails
+  cron.schedule('0 11 * * 2,4', safeJob('SEO Audit Warm Leads', async () => {
+    await auditWarmLeads(10);
+  }));
+  console.log('✅ 11:00 AM — SEO audit warm leads (Tue/Thu)');
+
+  // ── PUBLISH APPROVED BLOGS — 9 AM daily ──────────────────────────────────
+  // Checks for approved blog drafts and publishes them
+  cron.schedule('0 9 * * *', safeJob('Publish Approved Blogs', async () => {
+    await publishApprovedDrafts();
+  }));
+  console.log('✅ 9:00 AM  — Publish approved blog drafts (daily)');
 }
 
 module.exports = { startAllJobs };

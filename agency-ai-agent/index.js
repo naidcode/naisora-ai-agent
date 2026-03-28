@@ -11,19 +11,32 @@ const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testGmail } = require("./config/gmail");
 const { testConnection: testTelegram } = require("./config/telegram");
 const { startAllJobs } = require("./scheduler/cronJobs");
-const { scrapeOne, runFullScrape } = require("./modules/scraper/googleMapsScraper");
+const {
+  scrapeOne,
+  runFullScrape,
+} = require("./modules/scraper/googleMapsScraper");
 const { processLeads } = require("./modules/scraper/leadProcessor");
 const { deduplicateLeads } = require("./modules/scraper/leadDeduplicator");
 const { sendDailyWhatsApp } = require("./modules/outreach/whatsappSender");
 const { checkReplies } = require("./modules/outreach/replyReader");
 const { generateDailyPriorities } = require("./modules/outreach/leadScorer");
-const { runInstagramOutreach } = require("./modules/outreach/instagramOutreach");
+const {
+  runInstagramOutreach,
+} = require("./modules/outreach/instagramOutreach");
 const { runLinkedInOutreach } = require("./modules/outreach/linkedinOutreach");
-const { sendDailyWhatsApp } = require('./modules/outreach/whatsappSender');
-const { checkReplies } = require('./modules/outreach/replyReader');
-const { generateDailyPriorities } = require('./modules/outreach/leadScorer');
-const { runInstagramOutreach } = require('./modules/outreach/instagramOutreach');
-const { runLinkedInOutreach } = require('./modules/outreach/linkedinOutreach');
+const { sendDailyWhatsApp } = require("./modules/outreach/whatsappSender");
+const { checkReplies } = require("./modules/outreach/replyReader");
+const { generateDailyPriorities } = require("./modules/outreach/leadScorer");
+const {
+  runInstagramOutreach,
+} = require("./modules/outreach/instagramOutreach");
+const { runLinkedInOutreach } = require("./modules/outreach/linkedinOutreach");
+const { scrapeEmailsForLeads } = require("./modules/scraper/emailScraper");
+const { auditWarmLeads } = require("./modules/seo/seoAudit");
+const {
+  publishWeeklyBlogs,
+  publishApprovedDrafts,
+} = require("./modules/wordpress/blogPublisher");
 
 // ============================================
 // INTERACTIVE MENU
@@ -49,13 +62,17 @@ async function showMenu() {
 
     rl.question("Choose: ", async (choice) => {
       switch (choice.trim()) {
-
         case "7":
-          console.log("\n🗺️  Test scrape: Koramangala restaurants (5 leads)...");
+          console.log(
+            "\n🗺️  Test scrape: Koramangala restaurants (5 leads)...",
+          );
           try {
             const testLeads = await scrapeOne("Koramangala", "restaurants", 5);
             const testProcessed = await processLeads(testLeads, false);
-            const allTest = [...testProcessed.hot_leads, ...testProcessed.warm_leads];
+            const allTest = [
+              ...testProcessed.hot_leads,
+              ...testProcessed.warm_leads,
+            ];
             await deduplicateLeads(allTest);
           } catch (e) {
             console.error("❌ Scrape failed:", e.message);
@@ -66,7 +83,13 @@ async function showMenu() {
           console.log("\n🗺️  Full scrape: 5 areas, restaurants + cafes...");
           try {
             const rawLeads = await runFullScrape({
-              areas: ["Koramangala", "Indiranagar", "HSR Layout", "Jayanagar", "JP Nagar"],
+              areas: [
+                "Koramangala",
+                "Indiranagar",
+                "HSR Layout",
+                "Jayanagar",
+                "JP Nagar",
+              ],
               searchTypes: ["restaurants", "cafes"],
               maxPerSearch: 15,
             });
@@ -112,6 +135,16 @@ async function showMenu() {
           } catch (e) {
             console.error("❌ LinkedIn outreach failed:", e.message);
           }
+        case "13":
+          await scrapeEmailsForLeads(20);
+          break;
+
+        case "14":
+          await auditWarmLeads(5);
+          break;
+
+        case "15":
+          await publishApprovedDrafts();
           break;
 
         case "0":
@@ -163,7 +196,9 @@ async function startAgent() {
   try {
     results.database = await testDatabase();
   } catch (e) {
-    console.error("❌ Database failed — check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env");
+    console.error(
+      "❌ Database failed — check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env",
+    );
   }
 
   // Test Gmail
@@ -178,16 +213,26 @@ async function startAgent() {
     await testTelegram();
     results.telegram = true;
   } catch (e) {
-    console.error("❌ Telegram failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env");
+    console.error(
+      "❌ Telegram failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env",
+    );
   }
 
   // Show status
   console.log("\n" + "─".repeat(42));
   console.log("📊 CONNECTION STATUS:\n");
-  console.log(`  🧠 Claude AI:    ${results.claude   ? "✅ Connected" : "❌ Failed"}`);
-  console.log(`  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`);
-  console.log(`  📧 Gmail:        ${results.gmail    ? "✅ Connected" : "❌ Failed"}`);
-  console.log(`  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`);
+  console.log(
+    `  🧠 Claude AI:    ${results.claude ? "✅ Connected" : "❌ Failed"}`,
+  );
+  console.log(
+    `  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`,
+  );
+  console.log(
+    `  📧 Gmail:        ${results.gmail ? "✅ Connected" : "❌ Failed"}`,
+  );
+  console.log(
+    `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
+  );
 
   // ── Only Database is critical — everything else is optional ──
   if (!results.database) {

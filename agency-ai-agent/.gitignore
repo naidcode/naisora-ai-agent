@@ -1,1 +1,11 @@
+# Environment variables — never upload to GitHub
+.env
+
+# Session data — contains login cookies
 data/
+
+# Node modules — too large for GitHub
+node_modules/
+
+# Lock files (optional)
+package-lock.json
