@@ -19,18 +19,14 @@ const { processLeads } = require("./modules/scraper/leadProcessor");
 const { deduplicateLeads } = require("./modules/scraper/leadDeduplicator");
 const { sendDailyWhatsApp } = require("./modules/outreach/whatsappSender");
 const { checkReplies } = require("./modules/outreach/replyReader");
-const { generateDailyPriorities } = require("./modules/outreach/leadScorer");
 const {
   runInstagramOutreach,
 } = require("./modules/outreach/instagramOutreach");
 const { runLinkedInOutreach } = require("./modules/outreach/linkedinOutreach");
-const { sendDailyWhatsApp } = require("./modules/outreach/whatsappSender");
-const { checkReplies } = require("./modules/outreach/replyReader");
 const { generateDailyPriorities } = require("./modules/outreach/leadScorer");
 const {
   runInstagramOutreach,
 } = require("./modules/outreach/instagramOutreach");
-const { runLinkedInOutreach } = require("./modules/outreach/linkedinOutreach");
 const { scrapeEmailsForLeads } = require("./modules/scraper/emailScraper");
 const { auditWarmLeads } = require("./modules/seo/seoAudit");
 const {
