@@ -37,6 +37,11 @@ const {
   publishWeeklyBlogs,
   publishApprovedDrafts,
 } = require("./modules/wordpress/blogPublisher");
+const { researchKeywords } = require("./modules/seo/keywordResearch");
+const { runTechnicalAudit } = require("./modules/seo/technicalAudit");
+const { runWeeklySeoForAllClients } = require("./modules/seo/weeklySeoEngine");
+const { writeWeeklySocialPlan } = require("./modules/content/socialWriter");
+const { getCitationList } = require("./modules/offpage/citationSubmitter");
 
 // ============================================
 // INTERACTIVE MENU
@@ -145,6 +150,24 @@ async function showMenu() {
 
         case "15":
           await publishApprovedDrafts();
+          break;
+
+        case "16":
+          const keywords = await researchKeywords({
+            name: "Test Restaurant",
+            area: "Koramangala",
+            category: "restaurant",
+          });
+          console.log("Keywords found:", keywords.length);
+          break;
+
+        case "17":
+          const audit = await runTechnicalAudit("naisora.com");
+          console.log("Technical audit:", audit);
+          break;
+
+        case "18":
+          await runWeeklySeoForAllClients();
           break;
 
         case "0":

@@ -26,6 +26,10 @@ const { scrapeEmailsForLeads } = require('../modules/scraper/emailScraper');
 const { auditWarmLeads } = require('../modules/seo/seoAudit');
 const { publishApprovedDrafts } = require('../modules/wordpress/blogPublisher');
 
+// ─── Week 5 imports ───────────────────────────────────────────────────────────
+const { runWeeklySeoForAllClients } = require('../modules/seo/weeklySeoEngine');
+const { scheduleGBPPosts } = require('../modules/offpage/socialPublisher');
+
 function safeJob(name, fn) {
   return async () => {
     try {
@@ -152,6 +156,25 @@ function startAllJobs() {
     await publishApprovedDrafts();
   }));
   console.log('✅ 9:00 AM  — Publish approved blog drafts (daily)');
+
+    // ── WEEKLY SEO ENGINE — Monday 6 AM ──────────────────────────────────────
+  // Full SEO cycle for all active clients
+  cron.schedule('0 6 * * 1', safeJob('Weekly SEO Engine', async () => {
+    await runWeeklySeoForAllClients();
+  }));
+  console.log('✅ Monday 6 AM — Weekly SEO engine (all clients)');
+
+  // ── GBP POSTS — 1st of every month ───────────────────────────────────────
+  cron.schedule('0 10 1 * *', safeJob('GBP Posts', async () => {
+    const { data: clients } = await require('../config/database').supabase
+      .from('clients').select('*').eq('status', 'active');
+    if (clients) {
+      for (const client of clients) {
+        await scheduleGBPPosts(client);
+      }
+    }
+  }));
+  console.log('✅ 1st of month — GBP posts for all clients');
 }
 
 module.exports = { startAllJobs };
