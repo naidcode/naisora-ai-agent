@@ -11,36 +11,29 @@ const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testGmail } = require("./config/gmail");
 const { testConnection: testTelegram } = require("./config/telegram");
 const { startAllJobs } = require("./scheduler/cronJobs");
-const {
-  scrapeOne,
-  runFullScrape,
-} = require("./modules/scraper/googleMapsScraper");
+const { scrapeOne, runFullScrape } = require("./modules/scraper/googleMapsScraper");
 const { processLeads } = require("./modules/scraper/leadProcessor");
 const { deduplicateLeads } = require("./modules/scraper/leadDeduplicator");
 const { sendDailyWhatsApp } = require("./modules/outreach/whatsappSender");
 const { checkReplies } = require("./modules/outreach/replyReader");
-const {
-  runInstagramOutreach,
-} = require("./modules/outreach/instagramOutreach");
+const { runInstagramOutreach } = require("./modules/outreach/instagramOutreach");
 const { runLinkedInOutreach } = require("./modules/outreach/linkedinOutreach");
 const { generateDailyPriorities } = require("./modules/outreach/leadScorer");
-const {
-  runInstagramOutreach,
-} = require("./modules/outreach/instagramOutreach");
 const { scrapeEmailsForLeads } = require("./modules/scraper/emailScraper");
 const { auditWarmLeads } = require("./modules/seo/seoAudit");
-const {
-  publishWeeklyBlogs,
-  publishApprovedDrafts,
-} = require("./modules/wordpress/blogPublisher");
+const { publishApprovedDrafts } = require("./modules/wordpress/blogPublisher");
 const { researchKeywords } = require("./modules/seo/keywordResearch");
 const { runTechnicalAudit } = require("./modules/seo/technicalAudit");
 const { runWeeklySeoForAllClients } = require("./modules/seo/weeklySeoEngine");
-const { writeWeeklySocialPlan } = require("./modules/content/socialWriter");
 const { getCitationList } = require("./modules/offpage/citationSubmitter");
 
+// ─── Detect if running on Railway (no interactive menu on server) ─────────────
+const IS_RAILWAY = !!process.env.RAILWAY_ENVIRONMENT ||
+                   !!process.env.RAILWAY_SERVICE_NAME ||
+                   !!process.env.RAILWAY_PROJECT_ID;
+
 // ============================================
-// INTERACTIVE MENU
+// INTERACTIVE MENU (local only — skipped on Railway)
 // ============================================
 async function showMenu() {
   const readline = require("readline");
@@ -59,123 +52,107 @@ async function showMenu() {
     console.log("  10 — Check WhatsApp replies");
     console.log("  11 — Run Instagram outreach");
     console.log("  12 — Run LinkedIn outreach");
+    console.log("  13 — Scrape emails for leads with websites");
+    console.log("  14 — Audit warm lead websites (SEO scores)");
+    console.log("  15 — Publish approved blog drafts");
+    console.log("  16 — Research keywords for a restaurant");
+    console.log("  17 — Run technical audit on a website");
+    console.log("  18 — Run weekly SEO engine (all clients)");
     console.log("  0  — Exit\n");
 
     rl.question("Choose: ", async (choice) => {
-      switch (choice.trim()) {
-        case "7":
-          console.log(
-            "\n🗺️  Test scrape: Koramangala restaurants (5 leads)...",
-          );
-          try {
+      try {
+        switch (choice.trim()) {
+          case "7":
+            console.log("\n🗺️  Test scrape: Koramangala restaurants (5 leads)...");
             const testLeads = await scrapeOne("Koramangala", "restaurants", 5);
             const testProcessed = await processLeads(testLeads, false);
-            const allTest = [
-              ...testProcessed.hot_leads,
-              ...testProcessed.warm_leads,
-            ];
+            const allTest = [...testProcessed.hot_leads, ...testProcessed.warm_leads];
             await deduplicateLeads(allTest);
-          } catch (e) {
-            console.error("❌ Scrape failed:", e.message);
-          }
-          break;
+            break;
 
-        case "8":
-          console.log("\n🗺️  Full scrape: 5 areas, restaurants + cafes...");
-          try {
+          case "8":
+            console.log("\n🗺️  Full scrape: 5 areas, restaurants + cafes...");
             const rawLeads = await runFullScrape({
-              areas: [
-                "Koramangala",
-                "Indiranagar",
-                "HSR Layout",
-                "Jayanagar",
-                "JP Nagar",
-              ],
+              areas: ["Koramangala", "Indiranagar", "HSR Layout", "Jayanagar", "JP Nagar"],
               searchTypes: ["restaurants", "cafes"],
               maxPerSearch: 15,
             });
             const processed = await processLeads(rawLeads, false);
             const allLeads = [...processed.hot_leads, ...processed.warm_leads];
             await deduplicateLeads(allLeads);
-          } catch (e) {
-            console.error("❌ Full scrape failed:", e.message);
-          }
-          break;
+            break;
 
-        case "9":
-          console.log("\n📱 Sending WhatsApp outreach to hot leads...");
-          try {
+          case "9":
+            console.log("\n📱 Sending WhatsApp outreach to hot leads...");
             await sendDailyWhatsApp();
-          } catch (e) {
-            console.error("❌ WhatsApp outreach failed:", e.message);
-          }
-          break;
+            break;
 
-        case "10":
-          console.log("\n📬 Checking WhatsApp replies...");
-          try {
+          case "10":
+            console.log("\n📬 Checking WhatsApp replies...");
             await checkReplies();
-          } catch (e) {
-            console.error("❌ Reply check failed:", e.message);
-          }
-          break;
+            break;
 
-        case "11":
-          console.log("\n📸 Running Instagram outreach...");
-          try {
+          case "11":
+            console.log("\n📸 Running Instagram outreach...");
             await runInstagramOutreach();
-          } catch (e) {
-            console.error("❌ Instagram outreach failed:", e.message);
-          }
-          break;
+            break;
 
-        case "12":
-          console.log("\n💼 Running LinkedIn outreach...");
-          try {
+          case "12":
+            console.log("\n💼 Running LinkedIn outreach...");
             await runLinkedInOutreach();
-          } catch (e) {
-            console.error("❌ LinkedIn outreach failed:", e.message);
-          }
-        case "13":
-          await scrapeEmailsForLeads(20);
-          break;
+            break;
 
-        case "14":
-          await auditWarmLeads(5);
-          break;
+          case "13":
+            console.log("\n📧 Scraping emails for leads...");
+            await scrapeEmailsForLeads(20);
+            break;
 
-        case "15":
-          await publishApprovedDrafts();
-          break;
+          case "14":
+            console.log("\n🔍 Auditing warm lead websites...");
+            await auditWarmLeads(5);
+            break;
 
-        case "16":
-          const keywords = await researchKeywords({
-            name: "Test Restaurant",
-            area: "Koramangala",
-            category: "restaurant",
-          });
-          console.log("Keywords found:", keywords.length);
-          break;
+          case "15":
+            console.log("\n📝 Publishing approved blog drafts...");
+            await publishApprovedDrafts();
+            break;
 
-        case "17":
-          const audit = await runTechnicalAudit("naisora.com");
-          console.log("Technical audit:", audit);
-          break;
+          case "16":
+            console.log("\n🔍 Researching keywords...");
+            const keywords = await researchKeywords({
+              name: "Test Restaurant",
+              area: "Koramangala",
+              category: "restaurant",
+            });
+            console.log("Keywords found:", keywords.length);
+            break;
 
-        case "18":
-          await runWeeklySeoForAllClients();
-          break;
+          case "17":
+            console.log("\n⚙️  Running technical audit on naisora.com...");
+            const audit = await runTechnicalAudit("naisora.com");
+            console.log("Score:", audit.score + "/100");
+            console.log("Issues:", audit.issues.map(i => i.issue).join(", ") || "None");
+            break;
 
-        case "0":
-          console.log("👋 Stopping agent. Bye!");
-          rl.close();
-          process.exit(0);
+          case "18":
+            console.log("\n🚀 Running weekly SEO engine...");
+            await runWeeklySeoForAllClients();
+            break;
 
-        default:
-          console.log("❌ Invalid choice. Enter a number from the menu.");
+          case "0":
+            console.log("👋 Stopping agent. Bye!");
+            rl.close();
+            process.exit(0);
+
+          default:
+            console.log("❌ Invalid choice. Enter a number from the menu.");
+        }
+      } catch (e) {
+        console.error("❌ Error:", e.message);
       }
 
-      ask(); // show menu again after each action
+      ask();
     });
   };
 
@@ -191,19 +168,19 @@ async function startAgent() {
   console.log("║       NAISORA AI AGENT — v2.0          ║");
   console.log("║   AI-Powered Web Design Agency Bot     ║");
   console.log("╚════════════════════════════════════════╝\n");
+
+  if (IS_RAILWAY) {
+    console.log("☁️  Running on Railway — server mode (no interactive menu)\n");
+  } else {
+    console.log("💻 Running locally\n");
+  }
+
   console.log("🚀 Starting up...\n");
   console.log("─".repeat(42));
-
   console.log("\n📡 Testing all connections...\n");
 
-  const results = {
-    claude: false,
-    database: false,
-    gmail: false,
-    telegram: false,
-  };
+  const results = { claude: false, database: false, gmail: false, telegram: false };
 
-  // Test Claude AI
   try {
     await testClaude();
     results.claude = true;
@@ -211,49 +188,32 @@ async function startAgent() {
     console.error("❌ Claude failed — add ANTHROPIC_API_KEY to .env");
   }
 
-  // Test Database
   try {
     results.database = await testDatabase();
   } catch (e) {
-    console.error(
-      "❌ Database failed — check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env",
-    );
+    console.error("❌ Database failed — check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env");
   }
 
-  // Test Gmail
   try {
     results.gmail = await testGmail();
   } catch (e) {
-    console.error("❌ Gmail failed — will connect after Week 3");
+    console.error("❌ Gmail failed — will connect later");
   }
 
-  // Test Telegram
   try {
     await testTelegram();
     results.telegram = true;
   } catch (e) {
-    console.error(
-      "❌ Telegram failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env",
-    );
+    console.error("❌ Telegram failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env");
   }
 
-  // Show status
   console.log("\n" + "─".repeat(42));
   console.log("📊 CONNECTION STATUS:\n");
-  console.log(
-    `  🧠 Claude AI:    ${results.claude ? "✅ Connected" : "❌ Failed"}`,
-  );
-  console.log(
-    `  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`,
-  );
-  console.log(
-    `  📧 Gmail:        ${results.gmail ? "✅ Connected" : "❌ Failed"}`,
-  );
-  console.log(
-    `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
-  );
+  console.log(`  🧠 Claude AI:    ${results.claude   ? "✅ Connected" : "❌ Failed"}`);
+  console.log(`  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`);
+  console.log(`  📧 Gmail:        ${results.gmail    ? "✅ Connected" : "❌ Failed"}`);
+  console.log(`  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`);
 
-  // ── Only Database is critical — everything else is optional ──
   if (!results.database) {
     console.log("\n❌ Database connection failed. Cannot start agent.");
     console.log("Fix SUPABASE_URL and SUPABASE_SERVICE_KEY in .env\n");
@@ -266,22 +226,30 @@ async function startAgent() {
   }
 
   if (!results.gmail) {
-    console.log("⚠️  Gmail not connected — email features disabled.");
-    console.log("Will connect after Week 3.\n");
+    console.log("⚠️  Gmail not connected — email features disabled.\n");
   }
 
   console.log("\n" + "─".repeat(42));
-  console.log("✅ Agent starting with available connections...");
+  console.log("✅ Agent starting...");
   console.log("─".repeat(42) + "\n");
 
-  // Start all scheduled jobs
+  // Start all scheduled cron jobs
   startAllJobs();
 
   console.log("─".repeat(42));
-  console.log("\n🤖 Naisora Agent is live. Press Ctrl+C to stop.\n");
+  console.log("\n🤖 Naisora Agent is live.\n");
 
-  // Show interactive menu
-  showMenu();
+  // ── On Railway: keep process alive, no interactive menu ──
+  if (IS_RAILWAY) {
+    console.log("☁️  Railway mode — cron jobs running, waiting for scheduled tasks...");
+    console.log("📱 You will receive Telegram alerts for all activity.\n");
+    // Keep process alive on Railway
+    setInterval(() => {}, 1000 * 60 * 60); // heartbeat every hour
+  } else {
+    // Local: show interactive menu
+    console.log("💻 Local mode — showing interactive menu...\n");
+    showMenu();
+  }
 }
 
 // ============================================
