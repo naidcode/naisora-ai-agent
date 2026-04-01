@@ -11,12 +11,17 @@ const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testGmail } = require("./config/gmail");
 const { testConnection: testTelegram } = require("./config/telegram");
 const { startAllJobs } = require("./scheduler/cronJobs");
-const { scrapeOne, runFullScrape } = require("./modules/scraper/googleMapsScraper");
+const {
+  scrapeOne,
+  runFullScrape,
+} = require("./modules/scraper/googleMapsScraper");
 const { processLeads } = require("./modules/scraper/leadProcessor");
 const { deduplicateLeads } = require("./modules/scraper/leadDeduplicator");
 const { sendDailyWhatsApp } = require("./modules/outreach/whatsappSender");
 const { checkReplies } = require("./modules/outreach/replyReader");
-const { runInstagramOutreach } = require("./modules/outreach/instagramOutreach");
+const {
+  runInstagramOutreach,
+} = require("./modules/outreach/instagramOutreach");
 const { runLinkedInOutreach } = require("./modules/outreach/linkedinOutreach");
 const { generateDailyPriorities } = require("./modules/outreach/leadScorer");
 const { scrapeEmailsForLeads } = require("./modules/scraper/emailScraper");
@@ -26,11 +31,19 @@ const { researchKeywords } = require("./modules/seo/keywordResearch");
 const { runTechnicalAudit } = require("./modules/seo/technicalAudit");
 const { runWeeklySeoForAllClients } = require("./modules/seo/weeklySeoEngine");
 const { getCitationList } = require("./modules/offpage/citationSubmitter");
+const { generateDashboard } = require("./modules/tracking/dashboard");
+const { runMonthlyMentorSession } = require("./modules/reporting/mentorLLM");
+const {
+  weeklyFinancialSummary,
+} = require("./modules/reporting/financialTracker");
+const { generateReelIdeas } = require("./modules/social/reelIdeasGenerator");
+const { getRestaurantHashtags } = require("./modules/social/hashtagResearcher");
 
 // ─── Detect if running on Railway (no interactive menu on server) ─────────────
-const IS_RAILWAY = !!process.env.RAILWAY_ENVIRONMENT ||
-                   !!process.env.RAILWAY_SERVICE_NAME ||
-                   !!process.env.RAILWAY_PROJECT_ID;
+const IS_RAILWAY =
+  !!process.env.RAILWAY_ENVIRONMENT ||
+  !!process.env.RAILWAY_SERVICE_NAME ||
+  !!process.env.RAILWAY_PROJECT_ID;
 
 // ============================================
 // INTERACTIVE MENU (local only — skipped on Railway)
@@ -64,17 +77,28 @@ async function showMenu() {
       try {
         switch (choice.trim()) {
           case "7":
-            console.log("\n🗺️  Test scrape: Koramangala restaurants (5 leads)...");
+            console.log(
+              "\n🗺️  Test scrape: Koramangala restaurants (5 leads)...",
+            );
             const testLeads = await scrapeOne("Koramangala", "restaurants", 5);
             const testProcessed = await processLeads(testLeads, false);
-            const allTest = [...testProcessed.hot_leads, ...testProcessed.warm_leads];
+            const allTest = [
+              ...testProcessed.hot_leads,
+              ...testProcessed.warm_leads,
+            ];
             await deduplicateLeads(allTest);
             break;
 
           case "8":
             console.log("\n🗺️  Full scrape: 5 areas, restaurants + cafes...");
             const rawLeads = await runFullScrape({
-              areas: ["Koramangala", "Indiranagar", "HSR Layout", "Jayanagar", "JP Nagar"],
+              areas: [
+                "Koramangala",
+                "Indiranagar",
+                "HSR Layout",
+                "Jayanagar",
+                "JP Nagar",
+              ],
               searchTypes: ["restaurants", "cafes"],
               maxPerSearch: 15,
             });
@@ -132,12 +156,37 @@ async function showMenu() {
             console.log("\n⚙️  Running technical audit on naisora.com...");
             const audit = await runTechnicalAudit("naisora.com");
             console.log("Score:", audit.score + "/100");
-            console.log("Issues:", audit.issues.map(i => i.issue).join(", ") || "None");
+            console.log(
+              "Issues:",
+              audit.issues.map((i) => i.issue).join(", ") || "None",
+            );
             break;
 
           case "18":
             console.log("\n🚀 Running weekly SEO engine...");
             await runWeeklySeoForAllClients();
+            break;
+
+          case "19":
+            await generateDashboard();
+            break;
+
+          case "20":
+            await runMonthlyMentorSession();
+            break;
+
+          case "21":
+            await weeklyFinancialSummary();
+            break;
+
+          case "22":
+            const reels = await generateReelIdeas(5);
+            console.log(reels);
+            break;
+
+          case "23":
+            const tags = await getRestaurantHashtags();
+            console.log(tags);
             break;
 
           case "0":
@@ -179,7 +228,12 @@ async function startAgent() {
   console.log("─".repeat(42));
   console.log("\n📡 Testing all connections...\n");
 
-  const results = { claude: false, database: false, gmail: false, telegram: false };
+  const results = {
+    claude: false,
+    database: false,
+    gmail: false,
+    telegram: false,
+  };
 
   try {
     await testClaude();
@@ -191,7 +245,9 @@ async function startAgent() {
   try {
     results.database = await testDatabase();
   } catch (e) {
-    console.error("❌ Database failed — check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env");
+    console.error(
+      "❌ Database failed — check SUPABASE_URL and SUPABASE_SERVICE_KEY in .env",
+    );
   }
 
   try {
@@ -204,15 +260,25 @@ async function startAgent() {
     await testTelegram();
     results.telegram = true;
   } catch (e) {
-    console.error("❌ Telegram failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env");
+    console.error(
+      "❌ Telegram failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in .env",
+    );
   }
 
   console.log("\n" + "─".repeat(42));
   console.log("📊 CONNECTION STATUS:\n");
-  console.log(`  🧠 Claude AI:    ${results.claude   ? "✅ Connected" : "❌ Failed"}`);
-  console.log(`  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`);
-  console.log(`  📧 Gmail:        ${results.gmail    ? "✅ Connected" : "❌ Failed"}`);
-  console.log(`  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`);
+  console.log(
+    `  🧠 Claude AI:    ${results.claude ? "✅ Connected" : "❌ Failed"}`,
+  );
+  console.log(
+    `  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`,
+  );
+  console.log(
+    `  📧 Gmail:        ${results.gmail ? "✅ Connected" : "❌ Failed"}`,
+  );
+  console.log(
+    `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
+  );
 
   if (!results.database) {
     console.log("\n❌ Database connection failed. Cannot start agent.");
@@ -241,7 +307,9 @@ async function startAgent() {
 
   // ── On Railway: keep process alive, no interactive menu ──
   if (IS_RAILWAY) {
-    console.log("☁️  Railway mode — cron jobs running, waiting for scheduled tasks...");
+    console.log(
+      "☁️  Railway mode — cron jobs running, waiting for scheduled tasks...",
+    );
     console.log("📱 You will receive Telegram alerts for all activity.\n");
     // Keep process alive on Railway
     setInterval(() => {}, 1000 * 60 * 60); // heartbeat every hour

@@ -29,6 +29,15 @@ const { publishApprovedDrafts } = require('../modules/wordpress/blogPublisher');
 // ─── Week 5 imports ───────────────────────────────────────────────────────────
 const { runWeeklySeoForAllClients } = require('../modules/seo/weeklySeoEngine');
 const { scheduleGBPPosts } = require('../modules/offpage/socialPublisher');
+// ─── Week 6 imports ───────────────────────────────────────────────────────────
+const { runMonthlyReportsForAllClients } = require('../modules/reporting/monthlyReport');
+const { runMonthlyMentorSession } = require('../modules/reporting/mentorLLM');
+const { sendWeeklyReportsToAllClients } = require('../modules/reporting/weeklyWhatsapp');
+const { checkUpcomingRenewals, weeklyCostSummary } = require('../modules/reporting/billingAlerter');
+const { weeklyFinancialSummary } = require('../modules/reporting/financialTracker');
+const { generateDashboard } = require('../modules/tracking/dashboard');
+const { generateWeeklyContentPlan } = require('../modules/social/contentPlanner');
+const { analyseOutreachPerformance } = require('../modules/intelligence/selfImprover')
 
 function safeJob(name, fn) {
   return async () => {
@@ -175,6 +184,50 @@ function startAllJobs() {
     }
   }));
   console.log('✅ 1st of month — GBP posts for all clients');
+
+    // ── WEEKLY WHATSAPP TO CLIENTS — Sunday 7 PM ─────────────────────────────
+  cron.schedule('0 19 * * 0', safeJob('Weekly Client WhatsApp Reports', async () => {
+    await sendWeeklyReportsToAllClients();
+  }));
+  console.log('✅ Sunday 7 PM — Weekly WhatsApp reports to all clients');
+
+  // ── MONTHLY REPORTS — 1st of month 9 AM ──────────────────────────────────
+  cron.schedule('0 9 1 * *', safeJob('Monthly Client Reports', async () => {
+    await runMonthlyReportsForAllClients();
+  }));
+  console.log('✅ 1st of month — Monthly reports for all clients');
+
+  // ── MENTOR SESSION — 1st of month 10 AM ──────────────────────────────────
+  cron.schedule('0 10 1 * *', safeJob('Monthly Mentor Session', async () => {
+    await runMonthlyMentorSession();
+  }));
+  console.log('✅ 1st of month — Monthly mentor session');
+
+  // ── BILLING ALERTS — Every Monday 9 AM ───────────────────────────────────
+  cron.schedule('0 9 * * 1', safeJob('Billing Alerts', async () => {
+    await checkUpcomingRenewals();
+    await weeklyCostSummary();
+    await weeklyFinancialSummary();
+  }));
+  console.log('✅ Monday 9 AM — Billing and financial alerts');
+
+  // ── DASHBOARD — Every Sunday 8 AM ────────────────────────────────────────
+  cron.schedule('0 8 * * 0', safeJob('Weekly Dashboard', async () => {
+    await generateDashboard();
+  }));
+  console.log('✅ Sunday 8 AM — Full dashboard report');
+
+  // ── CONTENT PLAN — Every Sunday 9 AM ─────────────────────────────────────
+  cron.schedule('0 9 * * 0', safeJob('Weekly Content Plan', async () => {
+    await generateWeeklyContentPlan();
+  }));
+  console.log('✅ Sunday 9 AM — Weekly social content plan');
+
+  // ── SELF IMPROVEMENT — Every Sunday 10 PM ────────────────────────────────
+  cron.schedule('0 22 * * 0', safeJob('Self Improvement Analysis', async () => {
+    await analyseOutreachPerformance();
+  }));
+  console.log('✅ Sunday 10 PM — Self-improvement analysis');
 }
 
 module.exports = { startAllJobs };
