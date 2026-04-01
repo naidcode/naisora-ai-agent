@@ -16,6 +16,7 @@
     "axios": "^1.6.7",
     "dotenv": "^16.4.1",
     "googleapis": "^144.0.0",
+    "groq-sdk": "^1.1.2",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.8",
     "open": "^10.1.0",
