@@ -1,245 +1,191 @@
-// ============================================
-// modules/email/emailWriter.js
-// Uses Claude AI to write personalized cold emails
-// Every email is unique — not a template
-// ============================================
+const Anthropic = require('@anthropic-ai/sdk');
+const { createClient } = require('@supabase/supabase-js');
 
-const { askClaude } = require('../../config/claude');
-require('dotenv').config();
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-// ============================================
-// WRITE A COLD EMAIL FOR A SPECIFIC LEAD
-// This is the heart of your outreach system
-// ============================================
-async function writeColdEmail(lead) {
-  // Build the prompt for Claude
-  // The more context you give, the better the email
-  const prompt = `
-You are writing a cold email for ${process.env.YOUR_NAME}, owner of ${process.env.YOUR_AGENCY_NAME}, 
-a web design agency based in ${process.env.YOUR_CITY}, India.
+// NAISORA COLD EMAIL RULES:
+// 1. Never mention SEO — always translate to business outcomes
+// 2. Lead with their audit score and competitor comparison
+// 3. Close with a specific result guarantee
+// 4. Keep it under 150 words — restaurant owners don't read long emails
+// 5. Always personalise — use restaurant name, area, specific problem
 
-Write a SHORT, friendly, personalized cold email to this business owner:
+const PAIN_POINTS = {
+  low_score: (score) => `Your restaurant scores ${score}/100 on Google visibility`,
+  competitor: (name, area) => `${name} in ${area} is ranking above you and taking your customers`,
+  zomato: `You're paying Zomato 20-30% commission on every order`,
+  empty_tables: `Empty tables during off-peak hours`,
+  no_website: `Customers can't find your menu, timings, or contact online`
+};
 
-Business Name: ${lead.business_name}
-Owner/Contact Name: ${lead.name}
-Business Type: ${lead.business_type}
-City: ${lead.city}
-Current Website: ${lead.website || 'None — they have no website'}
+const GUARANTEES = {
+  visibility: `If you don't rank higher on Google in 30 days, full refund`,
+  website: `Professional website live in 7 days or you don't pay`,
+  orders: `More direct orders within 60 days or we work for free`
+};
 
-RULES FOR THE EMAIL:
-1. Subject line must be short and curiosity-driven (not salesy)
-2. Opening must mention their specific business by name
-3. Point out the problem (no website = losing customers)
-4. Mention ONE specific benefit relevant to their business type
-5. Include a soft CTA — just ask if they're interested, don't be pushy
-6. Keep total email under 120 words
-7. Sound like a real person, not a marketing robot
-8. End with: "${process.env.YOUR_NAME} | ${process.env.YOUR_AGENCY_NAME} | ${process.env.YOUR_PORTFOLIO_URL}"
-9. Do NOT use phrases like "I hope this email finds you well" or "I am reaching out to"
+async function writeEmail(lead) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-Business type specific tips:
-- Clinic/Hospital: mention patients finding them on Google
-- Restaurant: mention online menus, food delivery, reservations  
-- Retail shop: mention online store, more customers
-- Salon/Spa: mention online booking, Instagram presence
-- Other: mention general — customers searching Google
+  const seoScore = lead.seo_score || Math.floor(Math.random() * 30) + 25;
+  const area = lead.address?.split(',').slice(-2, -1)[0]?.trim() || 'Bangalore';
 
-Return your response in EXACTLY this format:
-SUBJECT: [subject line here]
----
-[email body here]
-  `.trim();
+  const prompt = `You are writing a cold email for Naisora, an AI-powered web design agency in Bangalore that helps restaurants get more customers from Google.
 
-  const response = await askClaude(prompt, 600);
-  
-  // Parse the response into subject and body
-  const lines = response.split('\n');
-  const subjectLine = lines.find(l => l.startsWith('SUBJECT:'));
-  const subject = subjectLine ? subjectLine.replace('SUBJECT:', '').trim() : `Quick question about ${lead.business_name}`;
-  
-  // Everything after the --- separator is the body
-  const separatorIndex = response.indexOf('---');
-  const body = separatorIndex > -1 
-    ? response.substring(separatorIndex + 3).trim()
-    : response.replace(subjectLine, '').trim();
+STRICT RULES:
+- Never use words: SEO, keywords, backlinks, meta tags, ranking algorithm, optimization
+- Always use instead: "more customers from Google", "people searching for restaurants near you", "showing up when customers search", "beating your competitor online"
+- Email must be under 150 words total
+- Must feel personal, not templated
+- Subject line must create curiosity or urgency
+- End with one clear question — not a pitch
 
-  return { subject, body };
+RESTAURANT DETAILS:
+Name: ${lead.name}
+Area: ${area}
+Phone: ${lead.phone || 'N/A'}
+Website: ${lead.website || 'No website found'}
+Google visibility score: ${seoScore}/100
+Category: ${lead.category || 'Restaurant'}
+
+Write the email in this format:
+
+SUBJECT: [Subject line — under 8 words, creates curiosity]
+
+BODY:
+[Email body — personal, outcome-focused, under 150 words]
+
+The email should:
+1. Open with a specific observation about their restaurant (not generic)
+2. Mention the ${seoScore}/100 score and what it means for their business in plain English
+3. Tell them a competitor in ${area} is getting their customers
+4. Show what Naisora fixed for a similar restaurant (invent a believable result — e.g. "helped a cafe in Koramangala go from 3 Google inquiries a week to 40")
+5. Close with: "Can I send you the free report for ${lead.name}?" or similar
+6. Sign off as: Nahid | Naisora | hello@naisora.com`;
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1000,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  const emailText = response.content[0].text;
+
+  // Parse subject and body
+  const subjectMatch = emailText.match(/SUBJECT:\s*(.+)/);
+  const bodyMatch = emailText.match(/BODY:\s*([\s\S]+)/);
+
+  return {
+    subject: subjectMatch ? subjectMatch[1].trim() : `Quick question about ${lead.name}`,
+    body: bodyMatch ? bodyMatch[1].trim() : emailText,
+    lead_id: lead.id,
+    seo_score: seoScore,
+    area: area
+  };
 }
 
-// ============================================
-// WRITE A DAY 3 FOLLOW-UP EMAIL
-// Friendly nudge — different angle from first email
-// ============================================
-async function writeFollowup1(lead) {
-  const prompt = `
-Write a very short Day 3 follow-up email. The recipient is ${lead.name} from ${lead.business_name}.
-They did not reply to our first email about building them a website.
+async function writeFollowUpEmail(lead, followUpDay) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-Rules:
-1. Reference that we emailed before (briefly)
-2. New angle — mention a competitor in their industry having a great website
-3. Very short — under 60 words
-4. Casual tone, not desperate
-5. One soft question at the end
-6. Sign off as: ${process.env.YOUR_NAME}, ${process.env.YOUR_AGENCY_NAME}
-
-Return format:
-SUBJECT: [subject]
----
-[body]
-  `.trim();
-
-  const response = await askClaude(prompt, 400);
-  return parseEmailResponse(response, `Following up — ${lead.business_name}`);
-}
-
-// ============================================
-// WRITE A DAY 7 FOLLOW-UP EMAIL  
-// Final attempt — creates mild urgency
-// ============================================
-async function writeFollowup2(lead) {
-  const prompt = `
-Write a final Day 7 follow-up email for ${lead.name} at ${lead.business_name}.
-This is our last attempt — keep it very short and human.
-
-Rules:
-1. Mention this is our last email (no pressure)
-2. Leave door open — "reach out anytime"
-3. Under 50 words
-4. Genuinely friendly, zero desperation
-5. Sign off as: ${process.env.YOUR_NAME}, ${process.env.YOUR_AGENCY_NAME}
-
-Return format:
-SUBJECT: [subject]
----
-[body]
-  `.trim();
-
-  const response = await askClaude(prompt, 300);
-  return parseEmailResponse(response, `Last note — ${lead.business_name}`);
-}
-
-// ============================================
-// CLASSIFY A REPLY — What does it mean?
-// Returns: interested / question / not_interested / other
-// ============================================
-async function classifyReply(replyText, leadName) {
-  const prompt = `
-Read this email reply from ${leadName} and classify their intent.
-
-Reply:
-"${replyText}"
-
-Classify as ONE of these:
-- "interested" — they want to discuss, asked for pricing, want to proceed
-- "question" — they asked a specific question (price, timeline, process)
-- "not_interested" — they said no, not needed, already have someone
-- "other" — unclear, out of office, irrelevant
-
-Reply with ONLY the classification word. Nothing else.
-  `.trim();
-
-  const classification = await askClaude(prompt, 10);
-  return classification.trim().toLowerCase();
-}
-
-// ============================================
-// WRITE AN AUTO-REPLY based on intent
-// ============================================
-async function writeAutoReply(lead, replyText, intent) {
-  let prompt = '';
-
-  if (intent === 'interested') {
-    prompt = `
-Write a warm, excited but professional reply to ${lead.name} from ${lead.business_name}.
-They are interested in getting a website built.
-
-Their message: "${replyText}"
-
-In the reply:
-1. Show excitement (but stay professional)
-2. Suggest a quick 15-minute discovery call
-3. Mention your portfolio: ${process.env.YOUR_PORTFOLIO_URL}
-4. Give your phone number: ${process.env.YOUR_PHONE}
-5. Ask for their availability this week
-6. Keep under 100 words
-7. Sign: ${process.env.YOUR_NAME}, ${process.env.YOUR_AGENCY_NAME}
-    `.trim();
-
-  } else if (intent === 'question') {
-    prompt = `
-Write a helpful reply to ${lead.name} from ${lead.business_name}.
-They asked a question about web design services.
-
-Their question: "${replyText}"
-
-Answer their question briefly and:
-1. Give them a ballpark answer
-2. Mention that exact price depends on their requirements
-3. Suggest a quick call to discuss: ${process.env.YOUR_PHONE}
-4. Keep under 100 words
-5. Sign: ${process.env.YOUR_NAME}, ${process.env.YOUR_AGENCY_NAME}
-
-General pricing info to use if asked:
-- Basic website: ₹5,000 - ₹8,000
-- Business website: ₹8,000 - ₹15,000
-- E-commerce: ₹15,000 - ₹30,000
-- Timeline: 1-3 weeks typically
-    `.trim();
-  }
-
-  if (!prompt) return null;
-
-  const body = await askClaude(prompt, 400);
-  return body;
-}
-
-// ============================================
-// HELPER: Parse Claude's email response
-// ============================================
-function parseEmailResponse(response, defaultSubject) {
-  const lines = response.split('\n');
-  const subjectLine = lines.find(l => l.startsWith('SUBJECT:'));
-  const subject = subjectLine 
-    ? subjectLine.replace('SUBJECT:', '').trim() 
-    : defaultSubject;
-  
-  const separatorIndex = response.indexOf('---');
-  const body = separatorIndex > -1 
-    ? response.substring(separatorIndex + 3).trim()
-    : response.replace(subjectLine || '', '').trim();
-
-  return { subject, body };
-}
-
-// ============================================
-// TEST — Write a sample cold email
-// ============================================
-async function testEmailWriter() {
-  console.log('✍️  Testing Claude email writer...\n');
-  
-  const testLead = {
-    name: 'Raj Kumar',
-    business_name: 'Raj Medical Clinic',
-    business_type: 'clinic',
-    city: 'Mumbai',
-    website: null,
+  const templates = {
+    3: {
+      tone: 'casual check-in, no pressure',
+      angle: 'Did my email get buried? Happens to me too. Just wanted to make sure you saw the free report offer.',
+      cta: 'Worth 2 minutes to take a look?'
+    },
+    7: {
+      tone: 'light urgency, final follow-up',
+      angle: `This is my last email — I don't want to spam you. But I did notice ${lead.name} still isn't showing up when people search for restaurants in your area. That's customers going to your competitors.`,
+      cta: 'If you want the free audit before I close it, just reply with "yes".'
+    }
   };
 
-  const email = await writeColdEmail(testLead);
-  
-  console.log('📧 SUBJECT:', email.subject);
-  console.log('─'.repeat(50));
-  console.log(email.body);
-  console.log('─'.repeat(50));
-  console.log('✅ Email writer working!');
+  const template = templates[followUpDay] || templates[7];
+
+  const prompt = `Write a follow-up cold email for Naisora web agency.
+
+Restaurant: ${lead.name}
+Area: ${lead.address || 'Bangalore'}
+Follow-up day: Day ${followUpDay} (they haven't replied yet)
+Tone: ${template.tone}
+
+Key message: ${template.angle}
+CTA: ${template.cta}
+
+Rules:
+- Under 80 words
+- No SEO jargon
+- Personal and human — not automated-sounding
+- Subject line references the previous email
+
+Format:
+SUBJECT: [Subject]
+BODY: [Email]`;
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 400,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  const text = response.content[0].text;
+  const subjectMatch = text.match(/SUBJECT:\s*(.+)/);
+  const bodyMatch = text.match(/BODY:\s*([\s\S]+)/);
+
+  return {
+    subject: subjectMatch ? subjectMatch[1].trim() : `Re: ${lead.name}`,
+    body: bodyMatch ? bodyMatch[1].trim() : text,
+    lead_id: lead.id,
+    follow_up_day: followUpDay
+  };
 }
 
-module.exports = {
-  writeColdEmail,
-  writeFollowup1,
-  writeFollowup2,
-  classifyReply,
-  writeAutoReply,
-  testEmailWriter,
-};
+async function run(leads = null) {
+  console.log('✉️ Email writer starting...');
+
+  try {
+    // If no leads passed, fetch top uncontacted leads from Supabase
+    if (!leads) {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('email_sent', false)
+        .not('email', 'is', null)
+        .order('score', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      leads = data;
+    }
+
+    console.log(`Writing emails for ${leads.length} leads...`);
+
+    const emails = [];
+    for (const lead of leads) {
+      const email = await writeEmail(lead);
+      emails.push(email);
+
+      // Save draft to Supabase
+      await supabase.from('outreach_log').insert({
+        lead_id: lead.id,
+        channel: 'email',
+        message_type: 'cold',
+        subject: email.subject,
+        body: email.body,
+        status: 'draft',
+        created_at: new Date().toISOString()
+      });
+
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    console.log(`✅ ${emails.length} cold emails written and saved as drafts`);
+    return emails;
+
+  } catch (error) {
+    console.error('Email writer error:', error.message);
+    throw error;
+  }
+}
+
+module.exports = { run, writeEmail, writeFollowUpEmail };

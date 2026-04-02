@@ -212,22 +212,17 @@ function startAllJobs() {
   console.log('✅ Monday 9 AM — Billing and financial alerts');
 
   // ── DASHBOARD — Every Sunday 8 AM ────────────────────────────────────────
-  cron.schedule('0 8 * * 0', safeJob('Weekly Dashboard', async () => {
-    await generateDashboard();
-  }));
-  console.log('✅ Sunday 8 AM — Full dashboard report');
+  // Sunday 8:00 AM — Weekly social progress report (runs BEFORE content plan)
+cron.schedule('0 8 * * 0', async () => {
+  console.log('Running weekly social performance report...');
+  await require('./modules/social/performanceTracker').run();
+});
 
-  // ── CONTENT PLAN — Every Sunday 9 AM ─────────────────────────────────────
-  cron.schedule('0 9 * * 0', safeJob('Weekly Content Plan', async () => {
-    await generateWeeklyContentPlan();
-  }));
-  console.log('✅ Sunday 9 AM — Weekly social content plan');
-
-  // ── SELF IMPROVEMENT — Every Sunday 10 PM ────────────────────────────────
-  cron.schedule('0 22 * * 0', safeJob('Self Improvement Analysis', async () => {
-    await analyseOutreachPerformance();
-  }));
-  console.log('✅ Sunday 10 PM — Self-improvement analysis');
+// Sunday 9:00 AM — Weekly content plan for all accounts
+cron.schedule('0 9 * * 0', async () => {
+  console.log('Running weekly content planner...');
+  await require('./modules/social/contentPlanner').run();
+});
 }
 
 module.exports = { startAllJobs };

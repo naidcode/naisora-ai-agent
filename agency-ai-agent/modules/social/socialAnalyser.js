@@ -1,60 +1,153 @@
-// modules/social/socialAnalyser.js
-// Naisora AI Agent — Social Media Analyser
-// Analyses @nahidpasha01 and client Instagram accounts
-// Reads engagement, finds best content types, reports weekly
-
-require('dotenv').config();
-const { route } = require('../../config/llmRouter');
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
 const { createClient } = require('@supabase/supabase-js');
+const { sendTelegram } = require('../../config/telegram');
+const Anthropic = require('@anthropic-ai/sdk');
+const { ACCOUNTS } = require('./socialAnalyser');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-// ─── Analyse account performance ──────────────────────────────────────────────
-async function analyseAccount(accountData) {
-  const prompt = `Analyse this Instagram account performance and give specific improvement advice.
+// Weekly benchmarks to track progress against
+const WEEKLY_TARGETS = {
+  personal: {
+    handle: 'nahidpasha01',
+    posts_target: 4,
+    platform: 'instagram'
+  },
+  agency: {
+    handle: 'naisora.official',
+    posts_target: 4,
+    platform: 'instagram'
+  },
+  linkedin: {
+    handle: 'linkedin',
+    posts_target: 3,
+    platform: 'linkedin'
+  }
+};
 
-Account: ${accountData.username}
-Followers: ${accountData.followers || 'unknown'}
-Recent posts engagement: ${accountData.avgEngagement || 'unknown'}%
-Best performing content: ${accountData.bestContent || 'unknown'}
-Worst performing content: ${accountData.worstContent || 'unknown'}
-Posting frequency: ${accountData.frequency || 'unknown'}
+async function getPreviousWeekPlan(handle) {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-Provide:
-1. Top 3 things working well
-2. Top 3 things to improve immediately
-3. Best content types for this account
-4. Optimal posting times for Bangalore audience
-5. Weekly content plan (7 post ideas)
+  const { data, error } = await supabase
+    .from('blog_posts')
+    .select('*')
+    .ilike('title', `%${handle}%`)
+    .eq('status', 'content_plan')
+    .gte('created_at', oneWeekAgo.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(1);
 
-Be specific and actionable. Focus on getting more restaurant owner followers for a web agency account.`;
-
-  return await route('client_report', prompt, null, 1000);
+  if (error || !data || data.length === 0) return null;
+  return data[0];
 }
 
-// ─── Weekly social media report for Naisora ──────────────────────────────────
-async function weeklyNaisoraReport() {
-  console.log('\n📊 Generating Naisora social media report...');
+async function generateProgressInsight(accountName, handle, platform, planExists, postsTarget) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  // Since we can't access Instagram API without approval,
-  // we generate strategic advice based on known account context
-  const accountData = {
-    username: '@nahidpasha01 (Naisora)',
-    followers: 'growing',
-    avgEngagement: 'unknown — connect Instagram Graph API',
-    bestContent: 'AI agent demos, web design before/after',
-    worstContent: 'generic posts without context',
-    frequency: 'irregular',
-  };
+  const prompt = `You are a social media growth coach reviewing weekly performance.
 
-  const report = await analyseAccount(accountData);
+Account: @${handle}
+Platform: ${platform}
+Weekly posts target: ${postsTarget}
+Content plan was generated: ${planExists ? 'Yes' : 'No'}
 
-  await sendTelegramAlert(
-    `📱 *Weekly Social Media Report — Naisora*\n\n${report.substring(0, 3000)}`
+Generate a short weekly progress review in this format:
+
+ACCOUNT: @${handle}
+━━━━━━━━━━━━━━
+WEEK IN REVIEW:
+[2 sentences — what should have happened this week based on the content plan]
+
+WHAT TO FOCUS ON NEXT WEEK:
+- [Focus point 1]
+- [Focus point 2]
+- [Focus point 3]
+
+GROWTH TIP OF THE WEEK:
+[One specific, actionable tip for this platform and niche]
+
+CONSISTENCY SCORE: [X/10 — based on whether plan was generated and available to execute]
+
+Keep it short, direct, motivating. No fluff.`;
+
+  const response = await client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 400,
+    messages: [{ role: 'user', content: prompt }]
+  });
+
+  return response.content[0].text;
+}
+
+async function buildWeeklyReport() {
+  const reportDate = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  });
+
+  const weekNumber = Math.ceil(
+    (new Date() - new Date(new Date().getFullYear(), 0, 1)) / (7 * 24 * 60 * 60 * 1000)
   );
 
-  return report;
+  // Header
+  await sendTelegram(
+    `📊 *NAISORA WEEKLY SOCIAL REPORT*\n` +
+    `📅 ${reportDate}\n` +
+    `📌 Week ${weekNumber} of ${new Date().getFullYear()}\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━`
+  );
+
+  await new Promise(r => setTimeout(r, 1000));
+
+  let totalScore = 0;
+  let accountCount = 0;
+
+  // Process each account
+  for (const [key, target] of Object.entries(WEEKLY_TARGETS)) {
+    const plan = await getPreviousWeekPlan(target.handle);
+    const planExists = !!plan;
+
+    const insight = await generateProgressInsight(
+      key,
+      target.handle,
+      target.platform,
+      planExists,
+      target.posts_target
+    );
+
+    // Extract score from insight
+    const scoreMatch = insight.match(/CONSISTENCY SCORE:\s*(\d+)/);
+    const score = scoreMatch ? parseInt(scoreMatch[1]) : 5;
+    totalScore += score;
+    accountCount++;
+
+    const emoji = target.platform === 'instagram' ? '📸' : '💼';
+    await sendTelegram(`${emoji} ${insight}`);
+    await new Promise(r => setTimeout(r, 1500));
+  }
+
+  // Overall summary
+  const avgScore = Math.round(totalScore / accountCount);
+  const scoreEmoji = avgScore >= 8 ? '🔥' : avgScore >= 6 ? '✅' : '⚠️';
+
+  await sendTelegram(
+    `━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `${scoreEmoji} *OVERALL SOCIAL SCORE: ${avgScore}/10*\n\n` +
+    `📋 *This week's content plan arrives now — check next message.*\n` +
+    `🎯 *Goal: Post consistently, reply to comments, engage with followers.*\n\n` +
+    `Next report: Sunday ${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-IN')}`
+  );
 }
 
-module.exports = { analyseAccount, weeklyNaisoraReport };
+async function run() {
+  console.log('📊 Running weekly social media performance tracker...');
+
+  try {
+    await buildWeeklyReport();
+    console.log('✅ Weekly social report sent to Telegram');
+  } catch (error) {
+    console.error('Performance tracker error:', error.message);
+    await sendTelegram(`❌ *Performance Tracker Error*\n${error.message}`);
+  }
+}
+
+module.exports = { run };
