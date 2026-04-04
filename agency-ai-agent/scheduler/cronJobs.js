@@ -1,44 +1,56 @@
 // scheduler/cronJobs.js
-// Naisora AI Agent — Complete Cron Schedule (Week 1 + Week 2 + Week 3)
-// All automated tasks with their exact timings
+// Naisora AI Agent — Complete Cron Schedule
+// Fixed: correct function names, correct module paths, circular dependency removed
 
 require('dotenv').config();
 const cron = require('node-cron');
 const { sendTelegramAlert } = require('../config/telegram');
 
-// ─── Week 1 imports ───────────────────────────────────────────────────────────
-const { sendDailyColdEmails, sendDailyFollowups } = require('../modules/email/emailSender');
+// ─── Email ────────────────────────────────────────────────────────────────────
+const { sendDailyColdEmails, runFollowUps } = require('../modules/email/emailSender');
 
-// ─── Week 2 imports ───────────────────────────────────────────────────────────
+// ─── Scraper ──────────────────────────────────────────────────────────────────
 const { runFullScrape } = require('../modules/scraper/googleMapsScraper');
 const { processLeads } = require('../modules/scraper/leadProcessor');
 const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');
+const { scrapeEmailsForLeads } = require('../modules/scraper/emailScraper');
 
-// ─── Week 3 imports ───────────────────────────────────────────────────────────
+// ─── Outreach ─────────────────────────────────────────────────────────────────
 const { sendDailyWhatsApp, sendFollowUp } = require('../modules/outreach/whatsappSender');
 const { checkReplies } = require('../modules/outreach/replyReader');
 const { generateDailyPriorities, weeklyPipelineSummary } = require('../modules/outreach/leadScorer');
 const { runInstagramOutreach } = require('../modules/outreach/instagramOutreach');
 const { runLinkedInOutreach } = require('../modules/outreach/linkedinOutreach');
 
-// ─── Week 4 imports ────────────────────────────────────────────────
-const { scrapeEmailsForLeads } = require('../modules/scraper/emailScraper');
+// ─── SEO ──────────────────────────────────────────────────────────────────────
 const { auditWarmLeads } = require('../modules/seo/seoAudit');
+const { runWeeklySeoForAllClients } = require('../modules/seo/weeklySeoEngine');
+
+// ─── WordPress ────────────────────────────────────────────────────────────────
 const { publishApprovedDrafts } = require('../modules/wordpress/blogPublisher');
 
-// ─── Week 5 imports ───────────────────────────────────────────────────────────
-const { runWeeklySeoForAllClients } = require('../modules/seo/weeklySeoEngine');
+// ─── Off-page ─────────────────────────────────────────────────────────────────
 const { scheduleGBPPosts } = require('../modules/offpage/socialPublisher');
-// ─── Week 6 imports ───────────────────────────────────────────────────────────
+
+// ─── Reporting ────────────────────────────────────────────────────────────────
 const { runMonthlyReportsForAllClients } = require('../modules/reporting/monthlyReport');
 const { runMonthlyMentorSession } = require('../modules/reporting/mentorLLM');
 const { sendWeeklyReportsToAllClients } = require('../modules/reporting/weeklyWhatsapp');
 const { checkUpcomingRenewals, weeklyCostSummary } = require('../modules/reporting/billingAlerter');
 const { weeklyFinancialSummary } = require('../modules/reporting/financialTracker');
 const { generateDashboard } = require('../modules/tracking/dashboard');
-const { generateWeeklyContentPlan } = require('../modules/social/contentPlanner');
-const { analyseOutreachPerformance } = require('../modules/intelligence/selfImprover')
 
+// ─── Intelligence ─────────────────────────────────────────────────────────────
+const { analyseOutreachPerformance } = require('../modules/intelligence/selfImprover');
+
+// ─── Social ───────────────────────────────────────────────────────────────────
+// FIX: correct paths — ../modules not ./modules
+// FIX: circular dependency removed — contentPlanner no longer imports from socialAnalyser
+const { run: runSocialAnalyser } = require('../modules/social/socialAnalyser');
+const { run: runContentPlanner } = require('../modules/social/contentPlanner');
+const { run: runPerformanceTracker } = require('../modules/social/performanceTracker');
+
+// ─── Safe wrapper ─────────────────────────────────────────────────────────────
 function safeJob(name, fn) {
   return async () => {
     try {
@@ -57,15 +69,13 @@ function startAllJobs() {
   console.log('║     NAISORA — Agent Scheduler Starting       ║');
   console.log('╚══════════════════════════════════════════════╝\n');
 
-  // ── DAILY PRIORITY REPORT — 8:30 AM ──────────────────────────────────────
-  // Tells you every morning who to follow up with today
+  // ── DAILY PRIORITY REPORT — 8:30 AM daily ────────────────────────────────
   cron.schedule('30 8 * * *', safeJob('Daily Priority Report', async () => {
     await generateDailyPriorities();
   }));
-  console.log('✅ 8:30 AM  — Daily priority report (Telegram)');
+  console.log('✅ 8:30 AM  — Daily priority report');
 
   // ── GOOGLE MAPS SCRAPE — 9 AM (Mon, Wed, Fri) ────────────────────────────
-  // Scrapes 5 areas × 2 types = ~150 leads, 3 days/week
   cron.schedule('0 9 * * 1,3,5', safeJob('Google Maps Scrape', async () => {
     const areas = ['Koramangala', 'Indiranagar', 'HSR Layout', 'Jayanagar', 'JP Nagar'];
     const rawLeads = await runFullScrape({
@@ -73,29 +83,32 @@ function startAllJobs() {
       searchTypes: ['restaurants', 'cafes'],
       maxPerSearch: 15,
     });
-    await getReadyLeads(rawLeads);
+    // FIX: processLeads was imported but never called — now called after scrape
+    if (rawLeads && rawLeads.length > 0) {
+      await processLeads(rawLeads);
+      await getReadyLeads(rawLeads);
+    }
   }));
   console.log('✅ 9:00 AM  — Google Maps scrape (Mon/Wed/Fri)');
 
+  // ── EMAIL OUTREACH — 10 AM daily ─────────────────────────────────────────
+  cron.schedule('0 10 * * *', safeJob('Email Cold Outreach', async () => {
+    await sendDailyColdEmails();
+  }));
+  console.log('✅ 10:00 AM — Email cold outreach (50/day)');
+
   // ── WHATSAPP OUTREACH — 11 AM daily ──────────────────────────────────────
-  // Sends to 30 hot leads, humanized messages, random delays
   cron.schedule('0 11 * * *', safeJob('WhatsApp Outreach', async () => {
     await sendDailyWhatsApp();
   }));
   console.log('✅ 11:00 AM — WhatsApp outreach (30 leads/day)');
 
-  // ── EMAIL OUTREACH — 10 AM daily ─────────────────────────────────────────
-  // Cold emails to leads with email addresses
-  cron.schedule('0 10 * * *', safeJob('Email Cold Outreach', async () => {
-    await sendDailyColdEmails();
-  }));
-  console.log('✅ 10:00 AM — Email outreach (50 leads/day)');
-
-  // ── WHATSAPP FOLLOW-UPS — 6 PM daily ─────────────────────────────────────
-  // Day 3 follow-ups to non-responders
+  // ── FOLLOW-UPS — 6 PM daily ──────────────────────────────────────────────
+  // FIX: was calling sendDailyFollowups which does not exist
+  // correct function name is runFollowUps
   cron.schedule('0 18 * * *', safeJob('WhatsApp & Email Follow-ups', async () => {
     await sendFollowUp();
-    await sendDailyFollowups();
+    await runFollowUps();
   }));
   console.log('✅ 6:00 PM  — Follow-ups (WhatsApp + Email)');
 
@@ -105,105 +118,58 @@ function startAllJobs() {
   }));
   console.log('✅ Every 2h — Reply checker (9 AM to 9 PM)');
 
-  // ── INSTAGRAM OUTREACH — 3 PM (Tue, Thu) ─────────────────────────────────
-  // 2 days/week, 20 DMs each = 40 DMs/week
-  cron.schedule('0 15 * * 2,4', safeJob('Instagram Outreach', async () => {
-    await runInstagramOutreach();
-  }));
-  console.log('✅ 3:00 PM  — Instagram outreach (Tue/Thu, 20 DMs)');
-
-  // ── LINKEDIN OUTREACH — 2 PM (Mon, Wed) ──────────────────────────────────
-  // 2 days/week, 15 connection requests each = 30/week
-  cron.schedule('0 14 * * 1,3', safeJob('LinkedIn Outreach', async () => {
-    await runLinkedInOutreach();
-  }));
-  console.log('✅ 2:00 PM  — LinkedIn outreach (Mon/Wed, 15 requests)');
-
-  // ── WEEKLY PIPELINE SUMMARY — Sunday 8 PM ────────────────────────────────
-  cron.schedule('0 20 * * 0', safeJob('Weekly Pipeline Summary', async () => {
-    await weeklyPipelineSummary();
-  }));
-  console.log('✅ Sunday 8 PM — Weekly pipeline summary');
-
-  // ── WEEKLY BUSINESS REPORT — Monday 8 AM ─────────────────────────────────
-  cron.schedule('0 8 * * 1', safeJob('Weekly Business Report', async () => {
-    const { getWeeklyStats } = require('../config/database');
-    const stats = await getWeeklyStats();
-    await sendTelegramAlert(
-      `📊 *Weekly Business Report — Naisora*\n\n` +
-      `New leads found: ${stats.newLeads}\n` +
-      `Emails sent: ${stats.emailsSent}\n` +
-      `Replies received: ${stats.replies}\n` +
-      `🔥 Hot leads: ${stats.hotLeads}\n\n` +
-      `Keep going — first client is close.`
-    );
-  }));
-  console.log('✅ Monday 8 AM — Weekly business report\n');
-
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log('🤖 Agent is running. All jobs scheduled.');
-  console.log('📱 You will receive Telegram alerts for all activity.');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-
-    // ── EMAIL SCRAPER — 10 AM (Tue, Thu) ─────────────────────────────────────
-  // Scrapes emails from websites of leads that have sites
+  // ── EMAIL SCRAPER — 10 AM (Tue, Thu) ─────────────────────────────────────
   cron.schedule('0 10 * * 2,4', safeJob('Email Scraper', async () => {
     await scrapeEmailsForLeads(30);
   }));
-  console.log('✅ 10:00 AM — Email scraper (Tue/Thu, 30 leads)');
+  console.log('✅ 10:00 AM — Email scraper (Tue/Thu)');
 
-  // ── SEO AUDIT — 11 AM (Tue, Thu) ─────────────────────────────────────────
-  // Audits websites of warm leads — generates score for cold emails
+  // ── SEO AUDIT WARM LEADS — 11 AM (Tue, Thu) ──────────────────────────────
   cron.schedule('0 11 * * 2,4', safeJob('SEO Audit Warm Leads', async () => {
     await auditWarmLeads(10);
   }));
   console.log('✅ 11:00 AM — SEO audit warm leads (Tue/Thu)');
 
+  // ── INSTAGRAM OUTREACH — 3 PM (Tue, Thu) ─────────────────────────────────
+  cron.schedule('0 15 * * 2,4', safeJob('Instagram Outreach', async () => {
+    await runInstagramOutreach();
+  }));
+  console.log('✅ 3:00 PM  — Instagram outreach (Tue/Thu)');
+
+  // ── LINKEDIN OUTREACH — 2 PM (Mon, Wed) ──────────────────────────────────
+  cron.schedule('0 14 * * 1,3', safeJob('LinkedIn Outreach', async () => {
+    await runLinkedInOutreach();
+  }));
+  console.log('✅ 2:00 PM  — LinkedIn outreach (Mon/Wed)');
+
   // ── PUBLISH APPROVED BLOGS — 9 AM daily ──────────────────────────────────
-  // Checks for approved blog drafts and publishes them
   cron.schedule('0 9 * * *', safeJob('Publish Approved Blogs', async () => {
     await publishApprovedDrafts();
   }));
-  console.log('✅ 9:00 AM  — Publish approved blog drafts (daily)');
+  console.log('✅ 9:00 AM  — Publish approved blog drafts');
 
-    // ── WEEKLY SEO ENGINE — Monday 6 AM ──────────────────────────────────────
-  // Full SEO cycle for all active clients
+  // ── WEEKLY SEO ENGINE — Monday 6 AM ──────────────────────────────────────
   cron.schedule('0 6 * * 1', safeJob('Weekly SEO Engine', async () => {
     await runWeeklySeoForAllClients();
   }));
-  console.log('✅ Monday 6 AM — Weekly SEO engine (all clients)');
+  console.log('✅ Monday 6 AM — Weekly SEO engine');
 
-  // ── GBP POSTS — 1st of every month ───────────────────────────────────────
-  cron.schedule('0 10 1 * *', safeJob('GBP Posts', async () => {
-    const { data: clients } = await require('../config/database').supabase
-      .from('clients').select('*').eq('status', 'active');
-    if (clients) {
-      for (const client of clients) {
-        await scheduleGBPPosts(client);
-      }
-    }
+  // ── LINKEDIN OUTREACH — 2 PM (Mon, Wed) ──────────────────────────────────
+  cron.schedule('0 9 * * 1', safeJob('Weekly Business Report', async () => {
+    const { getWeeklyStats } = require('../config/database');
+    const stats = await getWeeklyStats();
+    await sendTelegramAlert(
+      `📊 *Weekly Business Report — Naisora*\n\n` +
+      `New leads: ${stats.newLeads}\n` +
+      `Emails sent: ${stats.emailsSent}\n` +
+      `Replies: ${stats.replies}\n` +
+      `🔥 Hot leads: ${stats.hotLeads}\n\n` +
+      `Keep going — first client is close.`
+    );
   }));
-  console.log('✅ 1st of month — GBP posts for all clients');
+  console.log('✅ Monday 8 AM — Weekly business report');
 
-    // ── WEEKLY WHATSAPP TO CLIENTS — Sunday 7 PM ─────────────────────────────
-  cron.schedule('0 19 * * 0', safeJob('Weekly Client WhatsApp Reports', async () => {
-    await sendWeeklyReportsToAllClients();
-  }));
-  console.log('✅ Sunday 7 PM — Weekly WhatsApp reports to all clients');
-
-  // ── MONTHLY REPORTS — 1st of month 9 AM ──────────────────────────────────
-  cron.schedule('0 9 1 * *', safeJob('Monthly Client Reports', async () => {
-    await runMonthlyReportsForAllClients();
-  }));
-  console.log('✅ 1st of month — Monthly reports for all clients');
-
-  // ── MENTOR SESSION — 1st of month 10 AM ──────────────────────────────────
-  cron.schedule('0 10 1 * *', safeJob('Monthly Mentor Session', async () => {
-    await runMonthlyMentorSession();
-  }));
-  console.log('✅ 1st of month — Monthly mentor session');
-
-  // ── BILLING ALERTS — Every Monday 9 AM ───────────────────────────────────
+  // ── BILLING ALERTS — Monday 9 AM ─────────────────────────────────────────
   cron.schedule('0 9 * * 1', safeJob('Billing Alerts', async () => {
     await checkUpcomingRenewals();
     await weeklyCostSummary();
@@ -211,18 +177,74 @@ function startAllJobs() {
   }));
   console.log('✅ Monday 9 AM — Billing and financial alerts');
 
-  // ── DASHBOARD — Every Sunday 8 AM ────────────────────────────────────────
-  // Sunday 8:00 AM — Weekly social progress report (runs BEFORE content plan)
-cron.schedule('0 8 * * 0', async () => {
-  console.log('Running weekly social performance report...');
-  await require('./modules/social/performanceTracker').run();
-});
+  // ── WEEKLY CLIENT WHATSAPP — Sunday 7 PM ─────────────────────────────────
+  cron.schedule('0 19 * * 0', safeJob('Weekly Client WhatsApp Reports', async () => {
+    await sendWeeklyReportsToAllClients();
+  }));
+  console.log('✅ Sunday 7 PM — Weekly client WhatsApp reports');
 
-// Sunday 9:00 AM — Weekly content plan for all accounts
-cron.schedule('0 9 * * 0', async () => {
-  console.log('Running weekly content planner...');
-  await require('./modules/social/contentPlanner').run();
-});
+  // ── WEEKLY PIPELINE SUMMARY — Sunday 8 PM ────────────────────────────────
+  cron.schedule('0 20 * * 0', safeJob('Weekly Pipeline Summary', async () => {
+    await weeklyPipelineSummary();
+  }));
+  console.log('✅ Sunday 8 PM — Weekly pipeline summary');
+
+  // ── SELF IMPROVEMENT — Sunday 10 PM ──────────────────────────────────────
+  cron.schedule('0 22 * * 0', safeJob('Self Improvement Analysis', async () => {
+    await analyseOutreachPerformance();
+  }));
+  console.log('✅ Sunday 10 PM — Self improvement analysis');
+
+  // ── SOCIAL PERFORMANCE REPORT — Sunday 8 AM ──────────────────────────────
+  // FIX: was using wrong path ./modules — correct is ../modules
+  // FIX: now uses imported function at top, not inline require
+  cron.schedule('0 8 * * 0', safeJob('Weekly Social Performance Report', async () => {
+    await runPerformanceTracker();
+  }));
+  console.log('✅ Sunday 8 AM — Social performance report');
+
+  // ── WEEKLY CONTENT PLAN — Sunday 9 AM ────────────────────────────────────
+  // FIX: was using wrong path ./modules — correct is ../modules
+  cron.schedule('0 9 * * 0', safeJob('Weekly Content Plan', async () => {
+    await runContentPlanner();
+  }));
+  console.log('✅ Sunday 9 AM — Weekly content plan (all accounts)');
+
+  // ── DASHBOARD — Sunday 8 AM ───────────────────────────────────────────────
+  cron.schedule('0 8 * * 0', safeJob('Full Dashboard Report', async () => {
+    await generateDashboard();
+  }));
+  console.log('✅ Sunday 8 AM — Full dashboard report');
+
+  // ── GBP POSTS — 1st of every month ───────────────────────────────────────
+  cron.schedule('0 10 1 * *', safeJob('GBP Posts', async () => {
+    const { supabase } = require('../config/database');
+    const { data: clients } = await supabase
+      .from('clients').select('*').eq('status', 'active');
+    if (clients) {
+      for (const client of clients) {
+        await scheduleGBPPosts(client);
+      }
+    }
+  }));
+  console.log('✅ 1st of month — GBP posts');
+
+  // ── MONTHLY REPORTS — 1st of month 9 AM ──────────────────────────────────
+  cron.schedule('0 9 1 * *', safeJob('Monthly Client Reports', async () => {
+    await runMonthlyReportsForAllClients();
+  }));
+  console.log('✅ 1st of month — Monthly reports');
+
+  // ── MENTOR SESSION — 1st of month 10 AM ──────────────────────────────────
+  cron.schedule('0 10 1 * *', safeJob('Monthly Mentor Session', async () => {
+    await runMonthlyMentorSession();
+  }));
+  console.log('✅ 1st of month — Monthly mentor session');
+
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log('🤖 Agent is running. All jobs scheduled.');
+  console.log('📱 Telegram alerts active for all activity.');
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 }
 
 module.exports = { startAllJobs };

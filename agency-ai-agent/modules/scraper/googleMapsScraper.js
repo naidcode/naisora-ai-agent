@@ -50,16 +50,17 @@ const randomDelay = (min = 1500, max = 3500) =>
  * @returns {Array} Array of raw lead objects
  */
 async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
-  const browser = await puppeteer.launch({
-    headless: "new",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-blink-features=AutomationControlled",
-      "--window-size=1280,800",
-    ],
-    defaultViewport: { width: 1280, height: 800 },
-  });
+ const browser = await puppeteer.launch({
+  args: [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage',
+    '--disable-gpu',
+    '--no-zygote',
+    '--single-process'
+  ],
+  headless: 'new'
+});
 
   const leads = [];
 
@@ -83,7 +84,7 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
     const url = `https://www.google.com/maps/search/${encodedQuery}`;
 
     console.log(`\n🔍 Scraping: "${searchQuery}"`);
-    await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 8000 });
     await randomDelay(2000, 4000);
 
     // ── Scroll the results panel to load more listings ──
