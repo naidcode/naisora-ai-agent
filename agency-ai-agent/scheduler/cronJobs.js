@@ -7,7 +7,7 @@ const cron = require('node-cron');
 const { sendTelegramAlert } = require('../config/telegram');
 
 // ─── Email ────────────────────────────────────────────────────────────────────
-const { sendDailyColdEmails, runFollowUps } = require('../modules/email/emailSender');
+const { sendDailyColdEmails, sendFollowupEmails1, sendFollowupEmails2 } = require('../modules/email/emailSender');
 
 // ─── Scraper ──────────────────────────────────────────────────────────────────
 const { runFullScrape } = require('../modules/scraper/googleMapsScraper');
@@ -106,10 +106,11 @@ function startAllJobs() {
   // ── FOLLOW-UPS — 6 PM daily ──────────────────────────────────────────────
   // FIX: was calling sendDailyFollowups which does not exist
   // correct function name is runFollowUps
-  cron.schedule('0 18 * * *', safeJob('WhatsApp & Email Follow-ups', async () => {
+ cron.schedule('0 18 * * *', safeJob('WhatsApp & Email Follow-ups', async () => {
     await sendFollowUp();
-    await runFollowUps();
-  }));
+    await sendFollowupEmails1();
+    await sendFollowupEmails2();
+}));
   console.log('✅ 6:00 PM  — Follow-ups (WhatsApp + Email)');
 
   // ── REPLY CHECKER — Every 2 hours (9 AM to 9 PM) ─────────────────────────
