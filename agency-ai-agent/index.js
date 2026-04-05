@@ -329,3 +329,18 @@ startAgent().catch((error) => {
   process.exit(1);
 });
 
+
+// TEMPORARY SCRAPER TEST — DELETE AFTER CHECKING RAILWAY LOGS
+setTimeout(async () => {
+  try {
+    const { runFullScrape } = require('./modules/scraper/googleMapsScraper');
+    await runFullScrape({ 
+      areas: ['Koramangala'], 
+      searchTypes: ['restaurants'], 
+      maxPerSearch: 5 
+    });
+  } catch(e) {
+    console.log('Scraper test error:', e.message);
+  }
+}, 15000);
+
