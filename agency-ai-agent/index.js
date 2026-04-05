@@ -329,9 +329,3 @@ startAgent().catch((error) => {
   process.exit(1);
 });
 
-// TEMPORARY — run SEO audit on naisora.com
-// Delete this after it runs once
-setTimeout(async () => {
-  const { run } = require('./modules/seo/seoAudit');
-  await run('https://naisora.com');
-}, 5000);
