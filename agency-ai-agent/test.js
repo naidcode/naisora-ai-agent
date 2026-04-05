@@ -1,43 +1,143 @@
 // require('dotenv').config();
+// const { sendMessage } = require('./config/telegram');
 
 // async function runTest() {
-//   const { sendMessage } = require('./config/telegram');
+//   console.log('Running full agent health check...');
 
-//   // PageSpeed audit
-//   const { fullAudit } = require('./modules/seo/pagespeedAudit');
-//   const result = await fullAudit('https://naisora.com');
+//   const results = [];
 
-//   // Send whatever result comes back to Telegram
-//   await sendMessage(
-//     `📊 *PageSpeed Result*\n\n` +
-//     `🌐 naisora.com\n\n` +
-//     `${JSON.stringify(result, null, 2)}`
-//   );
+//   // 1. Check Supabase leads
+//   const { createClient } = require('@supabase/supabase-js');
+//   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-//   console.log('Done — check Telegram');
+//   const { data: leads, error: leadsError } = await supabase
+//     .from('leads')
+//     .select('*', { count: 'exact' });
+
+//   const { data: hotLeads } = await supabase
+//     .from('leads')
+//     .select('*')
+//     .gte('score', 70);
+
+//   const { data: emailSent } = await supabase
+//     .from('leads')
+//     .select('*')
+//     .eq('email_sent', true);
+
+//   const { data: whatsappSent } = await supabase
+//     .from('leads')
+//     .select('*')
+//     .eq('whatsapp_sent', true);
+
+//   const { data: outreachLog } = await supabase
+//     .from('outreach_log')
+//     .select('*')
+//     .order('created_at', { ascending: false })
+//     .limit(5);
+
+//   const { data: clients } = await supabase
+//     .from('clients')
+//     .select('*')
+//     .eq('status', 'active');
+
+//   const { data: blogs } = await supabase
+//     .from('blog_posts')
+//     .select('*')
+//     .eq('status', 'draft');
+
+//   const totalLeads = leads?.length || 0;
+//   const totalHot = hotLeads?.length || 0;
+//   const totalEmailSent = emailSent?.length || 0;
+//   const totalWhatsapp = whatsappSent?.length || 0;
+//   const totalClients = clients?.length || 0;
+//   const totalBlogs = blogs?.length || 0;
+
+//   const message =
+//     `🔍 *NAISORA AGENT HEALTH CHECK*\n` +
+//     `📅 ${new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}\n` +
+//     `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+//     `📊 *DATABASE STATUS*\n` +
+//     `Total leads in DB: ${totalLeads}\n` +
+//     `Hot leads (score 70+): ${totalHot}\n` +
+//     `Emails sent: ${totalEmailSent}\n` +
+//     `WhatsApp sent: ${totalWhatsapp}\n` +
+//     `Active clients: ${totalClients}\n` +
+//     `Blog drafts waiting: ${totalBlogs}\n\n` +
+//     `📨 *LAST 5 OUTREACH ACTIONS*\n` +
+//     (outreachLog && outreachLog.length > 0
+//       ? outreachLog.map(log =>
+//           `• ${log.channel || 'unknown'} → ${log.lead_id || 'N/A'} — ${log.status || 'N/A'} — ${new Date(log.created_at).toLocaleDateString('en-IN')}`
+//         ).join('\n')
+//       : 'No outreach logged yet') +
+//     `\n\n` +
+//     `${totalEmailSent === 0 ? '❌ NO EMAILS SENT YET — email outreach not working\n' : '✅ Emails are being sent\n'}` +
+//     `${totalWhatsapp === 0 ? '❌ NO WHATSAPP SENT YET — check Twilio\n' : '✅ WhatsApp is working\n'}` +
+//     `${totalLeads === 0 ? '❌ NO LEADS — scraper not working\n' : '✅ Scraper found leads\n'}` +
+//     `${totalHot === 0 ? '⚠️ No hot leads yet — check lead scoring\n' : `✅ ${totalHot} hot leads ready\n`}` +
+//     `━━━━━━━━━━━━━━━━━━━━━━\n` +
+//     `Run this check anytime: node test.js`;
+
+//   await sendMessage(message);
+//   console.log('Health check sent to Telegram');
 // }
 
 // runTest().catch(console.error);
 
 require('dotenv').config();
 
-// ═══════════════════════════════════════════════════════════════
-// NAISORA AGENT — COMPLETE MANUAL COMMAND REFERENCE
-// All function names verified from actual module exports
-// Copy any one block into runTest() below
-// Save → run: node test.js
-// ═══════════════════════════════════════════════════════════════
-
 async function runTest() {
-  // const { sendMessage } = require('./config/telegram');
-  // PASTE YOUR COMMAND HERE
-  const { sendDailyWhatsApp } = require('./modules/outreach/whatsappSender');
-  await sendDailyWhatsApp();
+  const { sendMessage } = require('./config/telegram');
+  const { createClient } = require('@supabase/supabase-js');
+  const twilio = require('twilio');
+
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+  const { data: leads } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('lead_category', 'hot')
+    .eq('outreach_status', 'new')
+    .limit(10);
+
+  console.log(`Sending to ${leads.length} leads...`);
+  let sent = 0;
+
+  for (const lead of leads) {
+    try {
+      const name = lead.business_name;
+      const area = lead.area || 'Bangalore';
+
+      const message = `Hi, I'm Nahid from Naisora. I checked ${name} online — you're not showing up when people search for restaurants in ${area}. Your competitor is taking those customers.\n\nWe fix this in 30 days. Can I send you a free audit report?\n\n— Nahid | naisora.com`;
+
+      await client.messages.create({
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+        to: `whatsapp:${lead.phone}`,
+        body: message
+      });
+
+      await supabase.from('leads').update({
+        whatsapp_sent: true,
+        outreach_status: 'contacted'
+      }).eq('id', lead.id);
+
+      console.log(`✅ Sent to ${name}`);
+      sent++;
+
+      await new Promise(r => setTimeout(r, 3000));
+    } catch (err) {
+      console.log(`❌ Failed ${lead.business_name}: ${err.message}`);
+    }
+  }
+
+  await sendMessage(
+    `📱 *WhatsApp Outreach Complete*\n\n` +
+    `Sent: ${sent}/${leads.length}\n` +
+    `Messages going to hot leads now.`
+  );
 }
 
 runTest().catch(console.error);
-
-
 // ═══════════════════════════════════════════════════════════════
 // SEO
 // ═══════════════════════════════════════════════════════════════
