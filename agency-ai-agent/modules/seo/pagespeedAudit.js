@@ -17,13 +17,14 @@ async function auditUrl(url, strategy = 'mobile') {
 
   try {
     const response = await axios.get(PAGESPEED_API, {
-      params: {
-        url: fullUrl,
-        strategy, // mobile or desktop
-        category: ['performance', 'seo', 'accessibility', 'best-practices'],
-      },
-      timeout: 30000,
-    });
+  params: {
+    url: fullUrl,
+    strategy,
+    category: ['performance', 'seo', 'accessibility', 'best-practices'],
+    key: process.env.PAGESPEED_API_KEY || '',
+  },
+  timeout: 30000,
+});
 
     const data = response.data;
     const categories = data.lighthouseResult?.categories;

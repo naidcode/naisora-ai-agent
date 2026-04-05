@@ -31,93 +31,128 @@ Rules:
 7. Format: use simple sections, no complex markdown`;
 
 // ─── Crawl basic on-page SEO data ────────────────────────────────────────────
-async function crawlOnPageSeo(url) {
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  });
+// Replace ONLY the crawlOnPageSeo function in your seoAudit.js
+// Keep everything else exactly as it is
 
-  const page = await browser.newPage();
-  await page.setUserAgent(
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-    '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-  );
+async function crawlOnPageSeo(url) {
+  const { sendMessage } = require('../../config/telegram');
 
   try {
-    await page.goto(url.startsWith('http') ? url : `https://${url}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 20000,
+    const browser = await puppeteer.launch({
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      headless: 'new'
     });
 
-    await delay(2000);
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    const onPage = await page.evaluate(() => {
-      // Title
-      const title = document.querySelector('title')?.textContent?.trim() || null;
-
-      // Meta description
-      const metaDesc = document.querySelector('meta[name="description"]')?.getAttribute('content') || null;
-
-      // H1 tags
-      const h1s = [...document.querySelectorAll('h1')].map(h => h.textContent?.trim()).filter(Boolean);
-
-      // H2 tags
-      const h2s = [...document.querySelectorAll('h2')].map(h => h.textContent?.trim()).filter(Boolean).slice(0, 5);
-
-      // Images without alt text
-      const allImages = document.querySelectorAll('img');
-      const imagesWithoutAlt = [...allImages].filter(img => !img.getAttribute('alt')).length;
-
-      // Schema markup
+    const result = await page.evaluate(() => {
+      const title = document.title || '';
+      const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+      const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.innerText.trim());
+      const h2s = Array.from(document.querySelectorAll('h2')).map(h => h.innerText.trim());
+      const images = document.querySelectorAll('img');
+      const imagesWithoutAlt = Array.from(images).filter(img => !img.alt || img.alt.trim() === '').length;
       const hasSchema = !!document.querySelector('script[type="application/ld+json"]');
-
-      // Phone number on page
-      const bodyText = document.body.innerText;
-      const phoneMatch = bodyText.match(/(\+91|0)?[6-9]\d{9}/);
-      const hasPhone = !!phoneMatch;
-
-      // Address on page
-      const hasAddress = bodyText.toLowerCase().includes('bangalore') ||
-                        bodyText.toLowerCase().includes('bengaluru');
-
-      // Social links
-      const links = [...document.querySelectorAll('a[href]')].map(a => a.href);
-      const hasFacebook = links.some(l => l.includes('facebook.com'));
-      const hasInstagram = links.some(l => l.includes('instagram.com'));
-
-      // Is mobile responsive
-      const viewport = document.querySelector('meta[name="viewport"]');
-      const isMobileReady = !!viewport;
-
-      // Word count
+      const bodyText = document.body?.innerText || '';
       const wordCount = bodyText.split(/\s+/).filter(Boolean).length;
+      const hasPhone = /(\+91|0)[- ]?[6-9]\d{9}/.test(bodyText);
+      const hasAddress = /bangalore|bengaluru/i.test(bodyText);
+      const hasInstagram = !!document.querySelector('a[href*="instagram"]');
+      const hasFacebook = !!document.querySelector('a[href*="facebook"]');
+      const isMobileReady = !!document.querySelector('meta[name="viewport"]');
 
       return {
         title,
-        titleLength: title?.length || 0,
+        titleLength: title.length,
         metaDesc,
-        metaDescLength: metaDesc?.length || 0,
+        metaDescLength: metaDesc.length,
         h1s,
         h2s,
         imagesWithoutAlt,
-        totalImages: allImages.length,
+        totalImages: images.length,
         hasSchema,
         hasPhone,
         hasAddress,
         hasFacebook,
         hasInstagram,
         isMobileReady,
-        wordCount,
+        wordCount
       };
     });
 
-    return onPage;
-
-  } catch (err) {
-    console.error(`On-page crawl failed: ${err.message}`);
-    return null;
-  } finally {
     await browser.close();
+
+    // Score calculation
+    let score = 100;
+    const issues = [];
+    const wins = [];
+
+    if (result.h1s.length === 0) { score -= 15; issues.push('❌ No H1 tag found'); }
+    else if (result.h1s.length > 1) { score -= 10; issues.push(`⚠️ Multiple H1 tags (${result.h1s.length}) — should be only 1`); }
+    else { wins.push('✅ H1 tag correct'); }
+
+    if (!result.metaDesc) { score -= 15; issues.push('❌ No meta description'); }
+    else if (result.metaDescLength < 120) { score -= 5; issues.push(`⚠️ Meta description too short (${result.metaDescLength} chars) — aim for 150+`); }
+    else { wins.push(`✅ Meta description good (${result.metaDescLength} chars)`); }
+
+    if (result.titleLength < 30) { score -= 10; issues.push('❌ Title tag too short'); }
+    else if (result.titleLength > 65) { score -= 5; issues.push(`⚠️ Title tag too long (${result.titleLength} chars) — keep under 60`); }
+    else { wins.push(`✅ Title tag good (${result.titleLength} chars)`); }
+
+    if (!result.hasSchema) { score -= 15; issues.push('❌ No schema markup — add JSON-LD'); }
+    else { wins.push('✅ Schema markup found'); }
+
+    if (!result.hasPhone) { score -= 10; issues.push('❌ No phone number found on page'); }
+    else { wins.push('✅ Phone number found'); }
+
+    if (result.imagesWithoutAlt > 0) { score -= 10; issues.push(`⚠️ ${result.imagesWithoutAlt} images missing alt text`); }
+    else { wins.push('✅ All images have alt text'); }
+
+    if (!result.isMobileReady) { score -= 10; issues.push('❌ Not mobile friendly — missing viewport meta'); }
+    else { wins.push('✅ Mobile friendly'); }
+
+    if (result.wordCount < 500) { score -= 10; issues.push(`⚠️ Low word count (${result.wordCount}) — aim for 800+`); }
+    else { wins.push(`✅ Word count good (${result.wordCount})`); }
+
+    if (!result.hasInstagram) { score -= 5; issues.push('⚠️ No Instagram link found'); }
+    else { wins.push('✅ Instagram linked'); }
+
+    score = Math.max(0, score);
+
+    const scoreEmoji = score >= 80 ? '🟢' : score >= 60 ? '🟡' : '🔴';
+
+    // Build clean Telegram message
+    const message =
+      `🔍 *SEO Audit Report*\n` +
+      `🌐 ${url}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `${scoreEmoji} *Score: ${score}/100*\n\n` +
+      `📄 *Page Details*\n` +
+      `Title: ${result.title}\n` +
+      `Meta: ${result.metaDesc || 'Not found'}\n` +
+      `H1 tags: ${result.h1s.length} found\n` +
+      `Word count: ${result.wordCount}\n` +
+      `Images: ${result.totalImages} total, ${result.imagesWithoutAlt} missing alt\n\n` +
+      (issues.length > 0
+        ? `🚨 *Issues to Fix (${issues.length}):*\n${issues.join('\n')}\n\n`
+        : '') +
+      (wins.length > 0
+        ? `✅ *What is Working (${wins.length}):*\n${wins.join('\n')}\n\n`
+        : '') +
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `Fix the issues above to improve your Google ranking.`;
+
+    await sendMessage(message);
+    console.log(`✅ SEO audit complete — Score: ${score}/100`);
+
+    return result;
+
+  } catch (error) {
+    console.error('crawlOnPageSeo error:', error.message);
+    const { sendMessage } = require('../../config/telegram');
+    await sendMessage(`❌ *SEO Audit Failed*\nURL: ${url}\nError: ${error.message}`);
+    throw error;
   }
 }
 
@@ -335,7 +370,7 @@ async function auditWarmLeads(limit = 10) {
     await delay(3000);
   }
 
-  await sendTelegramAlert(
+  await sendMessage(
     `🔍 *SEO Audits Complete*\n\nAudited ${leads.length} websites.\nCheck Supabase for scores.`
   );
 }
