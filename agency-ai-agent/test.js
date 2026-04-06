@@ -86,11 +86,14 @@
 require('dotenv').config();
 
 async function runTest() {
-  // Inside runTest() in test.js
-
-const { generateCompetitorReport } = require('./modules/intelligence/competitorTracker');
-
-await generateCompetitorReport('web design agency restaurants Bangalore');
+  const { run } = require('./modules/content/blogWriter');
+  await run({
+    clientId: 'naisora',
+    restaurantName: 'Naisora Agency',
+    topic: 'Why every restaurant in Bangalore needs a website in 2026',
+    blogType: 'local_seo',
+    area: 'Bangalore'
+  });
 }
 
 runTest().catch(console.error);
