@@ -86,58 +86,69 @@
 require('dotenv').config();
 
 async function runTest() {
-  const { sendMessage } = require('./config/telegram');
-  const { createClient } = require('@supabase/supabase-js');
-  const twilio = require('twilio');
+  // Inside runTest() in test.js
 
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+const { generateCompetitorReport } = require('./modules/intelligence/competitorTracker');
 
-  const { data: leads } = await supabase
-    .from('leads')
-    .select('*')
-    .eq('lead_category', 'hot')
-    .eq('outreach_status', 'new')
-    .limit(10);
-
-  console.log(`Sending to ${leads.length} leads...`);
-  let sent = 0;
-
-  for (const lead of leads) {
-    try {
-      const name = lead.business_name;
-      const area = lead.area || 'Bangalore';
-
-      const message = `Hi, I'm Nahid from Naisora. I checked ${name} online — you're not showing up when people search for restaurants in ${area}. Your competitor is taking those customers.\n\nWe fix this in 30 days. Can I send you a free audit report?\n\n— Nahid | naisora.com`;
-
-      await client.messages.create({
-        from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
-        to: `whatsapp:${lead.phone}`,
-        body: message
-      });
-
-      await supabase.from('leads').update({
-        whatsapp_sent: true,
-        outreach_status: 'contacted'
-      }).eq('id', lead.id);
-
-      console.log(`✅ Sent to ${name}`);
-      sent++;
-
-      await new Promise(r => setTimeout(r, 3000));
-    } catch (err) {
-      console.log(`❌ Failed ${lead.business_name}: ${err.message}`);
-    }
-  }
-
-  await sendMessage(
-    `📱 *WhatsApp Outreach Complete*\n\n` +
-    `Sent: ${sent}/${leads.length}\n` +
-    `Messages going to hot leads now.`
-  );
+await generateCompetitorReport('web design agency restaurants Bangalore');
 }
 
 runTest().catch(console.error);
+// require('dotenv').config();
+
+// async function runTest() {
+//   const { sendMessage } = require('./config/telegram');
+//   const { createClient } = require('@supabase/supabase-js');
+//   const twilio = require('twilio');
+
+//   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+//   const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+//   const { data: leads } = await supabase
+//     .from('leads')
+//     .select('*')
+//     .eq('lead_category', 'hot')
+//     .eq('outreach_status', 'new')
+//     .limit(10);
+
+//   console.log(`Sending to ${leads.length} leads...`);
+//   let sent = 0;
+
+//   for (const lead of leads) {
+//     try {
+//       const name = lead.business_name;
+//       const area = lead.area || 'Bangalore';
+
+//       const message = `Hi, I'm Nahid from Naisora. I checked ${name} online — you're not showing up when people search for restaurants in ${area}. Your competitor is taking those customers.\n\nWe fix this in 30 days. Can I send you a free audit report?\n\n— Nahid | naisora.com`;
+
+//       await client.messages.create({
+//         from: `whatsapp:${process.env.TWILIO_WHATSAPP_FROM}`,
+//         to: `whatsapp:${lead.phone}`,
+//         body: message
+//       });
+
+//       await supabase.from('leads').update({
+//         whatsapp_sent: true,
+//         outreach_status: 'contacted'
+//       }).eq('id', lead.id);
+
+//       console.log(`✅ Sent to ${name}`);
+//       sent++;
+
+//       await new Promise(r => setTimeout(r, 3000));
+//     } catch (err) {
+//       console.log(`❌ Failed ${lead.business_name}: ${err.message}`);
+//     }
+//   }
+
+//   await sendMessage(
+//     `📱 *WhatsApp Outreach Complete*\n\n` +
+//     `Sent: ${sent}/${leads.length}\n` +
+//     `Messages going to hot leads now.`
+//   );
+// }
+
+// runTest().catch(console.error);
 // ═══════════════════════════════════════════════════════════════
 // SEO
 // ═══════════════════════════════════════════════════════════════

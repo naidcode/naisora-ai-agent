@@ -2,7 +2,7 @@
 // Tracks competing web agencies in Bangalore monthly
 
 require('dotenv').config();
-const { route } = require('../../config/llmRouter');
+const { askClaudeSonnet } = require('../../config/claude');
 const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
 
 const BANGALORE_AGENCIES = [
@@ -26,13 +26,13 @@ Analyse:
 
 Be specific and honest about weaknesses too.`;
 
-  const report = await route('intelligence_report', prompt, null, 800);
+  const response = await askClaudeSonnet(prompt);
 
   await sendTelegramAlert(
     `🕵️ *Monthly Competitor Report*\n\n${report.substring(0, 3500)}`
   );
 
-  return report;
+  return response;
 }
 
 module.exports = { generateCompetitorReport };
