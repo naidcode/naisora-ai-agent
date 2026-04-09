@@ -16,29 +16,45 @@ envContent.split('\n').forEach(line => {
 });
 
 async function runTest() {
+  const url = 'https://naisora.com';
+  
+  console.log(`\n================================`);
+  console.log(`🚀 RUNNING FULL SEO AUDIT`);
+  console.log(`================================`);
+  
+  try {
+    // 1. Full SEO audit (On-page)
+    const { auditWebsite } = require('./modules/seo/seoAudit');
+    console.log(`\n🔍 1. Running On-page SEO audit for ${url}...`);
+    await auditWebsite({ website: url, name: 'Naisora' });
+    console.log(`✅ On-page audit complete.`);
+  } catch (err) {
+    console.error('❌ On-page audit failed:', err);
+  }
 
-  // PASTE YOUR COMMAND HERE — replace what is below
-// Inside runTest() in test.js
-// Inside runTest() in test.js
+  try {
+    // 2. Technical SEO
+    const { runTechnicalAudit } = require('./modules/seo/technicalAudit');
+    console.log(`\n⚙️ 2. Running Technical SEO audit for ${url}...`);
+    await runTechnicalAudit(url);
+    console.log(`✅ Technical audit complete.`);
+  } catch (err) {
+    console.error('❌ Technical audit failed:', err);
+  }
 
-// Inside runTest() in test.js
-
-const { run } = require('./modules/content/blogWriter');
-await run({
-  clientId: 'naisora',
-  restaurantName: 'Naisora Agency',
-  topic: 'Why every restaurant in Bangalore needs a website in 2026 — not just a Zomato page',
-  blogType: 'local_seo',
-  area: 'Bangalore',
-  cuisine: 'web design agency for restaurants',
-  keywords: ['restaurant website Bangalore', 'web design for restaurants', 'restaurant SEO Bangalore']
-});
-
-await sendMessage(
-  `🔑 *Keyword Research — Naisora*\n\n` +
-  `${JSON.stringify(result, null, 2)}`
-);
-
+  try {
+    // 3. PageSpeed
+    const { fullAudit } = require('./modules/seo/pagespeedAudit');
+    console.log(`\n⚡ 3. Checking speed for ${url}...`);
+    const result = await fullAudit(url);
+    console.log('\n--- PageSpeed Full Result ---');
+    console.log(JSON.stringify(result, null, 2));
+    console.log(`✅ Speed check complete.`);
+  } catch (err) {
+    console.error('❌ Speed check failed:', err);
+  }
+  
+  console.log(`\n🎉 FULL AUDIT COMPLETE`);
 }
 
 runTest().catch(console.error);

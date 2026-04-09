@@ -302,6 +302,34 @@ async function auditWebsite(lead) {
   console.log(`   📄 On-Page SEO: ${onPageScore}/100`);
   console.log(`   ⚠️  Issues found: ${auditData.issues.length}`);
 
+  // Send full performance result to Telegram
+  try {
+    const { sendMessage } = require('../../config/telegram');
+    const speedEmoji = pagespeedScore >= 80 ? '🟢' : pagespeedScore >= 50 ? '🟡' : '🔴';
+    const deskScore = pagespeed?.summary?.desktopScore || 0;
+    const deskEmoji = deskScore >= 80 ? '🟢' : deskScore >= 50 ? '🟡' : '🔴';
+    
+    const finalMessage = 
+      `🚀 *Full Performance Audit*\n` +
+      `🌐 ${lead.website}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+      `📊 *Overall Grade: ${getGrade(overallScore)}* (${overallScore}/100)\n\n` +
+      `⚡ *Speed Metrics*\n` +
+      `${speedEmoji} Mobile Score: ${pagespeedScore}/100\n` +
+      `${deskEmoji} Desktop Score: ${deskScore}/100\n` +
+      `Load Time (Mobile LCP): ${pagespeed?.mobile?.vitals?.lcp || 'N/A'}\n\n` +
+      `📄 *On-Page SEO*\n` +
+      `Score: ${onPageScore}/100\n\n` +
+      (auditData.issues.length > 0
+        ? `🚨 *Top Issues to Fix:*\n${auditData.issues.slice(0,3).map(i => '- ' + i).join('\n')}\n\n`
+        : '') +
+      `━━━━━━━━━━━━━━━━━━━━━━`;
+      
+    await sendMessage(finalMessage);
+  } catch (err) {
+    console.error('Failed to send final Telegram message:', err.message);
+  }
+
   return auditData;
 }
 
