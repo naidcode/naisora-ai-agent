@@ -5,7 +5,7 @@
 // Priority target: businesses with NO website (highest conversion)
 
 const puppeteer = require("puppeteer");
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
+const { sendMessage } = require('../../config/telegram');
 
 // ─── Bangalore target areas ──────────────────────────────────────────────────
 // Covered in order of restaurant density and digital gap opportunity
@@ -50,22 +50,31 @@ const randomDelay = (min = 1500, max = 3500) =>
  * @returns {Array} Array of raw lead objects
  */
 async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
- const browser = await puppeteer.launch({
-  headless: 'new',
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-gpu',
-    '--no-zygote',
-    '--single-process',
-    '--disable-web-security',
-    '--disable-features=IsolateOrigins,site-per-process',
-    '--window-size=1280,800'
-  ],
-  defaultViewport: { width: 1280, height: 800 },
-  timeout: 60000
-});
+  const browser = await puppeteer.launch({
+    headless: 'new',
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--window-size=1280,800',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-sync',
+      '--disable-translate',
+      '--hide-scrollbars',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--no-first-run',
+      '--safebrowsing-disable-auto-update'
+    ],
+    defaultViewport: { width: 1280, height: 800 },
+    timeout: 60000
+  });
 
   const leads = [];
 
@@ -89,8 +98,20 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
     const url = `https://www.google.com/maps/search/${encodedQuery}`;
 
     console.log(`\n🔍 Scraping: "${searchQuery}"`);
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-    await randomDelay(2000, 4000);
+
+    // ── Robust Navigation with Retries ──
+    try {
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
+    } catch (e) {
+      console.log('⚠️  Initial navigation flake, retrying with simple load...');
+      try {
+        await page.goto(url, { waitUntil: 'load', timeout: 60000 });
+      } catch (e2) {
+        console.log('⚠️  Second attempt failed, trying domcontentloaded...');
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+      }
+    }
+    await randomDelay(3000, 5000);
 
     // ── Scroll the results panel to load more listings ──
     await scrollResultsPanel(page, maxResults);
@@ -331,7 +352,7 @@ async function runFullScrape(options = {}) {
   console.log(`   Has website         : ${totalScraped - noWebsiteCount}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-  await sendTelegramAlert(
+  await sendMessage(
     `🗺️ *Maps Scrape Complete*\n\n` +
       `Areas: ${areas.join(", ")}\n` +
       `Total leads: ${totalScraped}\n` +

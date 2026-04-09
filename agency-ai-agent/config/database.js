@@ -4,13 +4,25 @@
 // All leads, clients, and statuses are stored here
 // ============================================
 
-require('dotenv').config();
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
+
 const { createClient } = require('@supabase/supabase-js');
 
 // Connect to your Supabase project
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY
 );
 
 // ============================================
@@ -45,7 +57,8 @@ async function saveLead(leadData) {
       website: leadData.website || null,       // their current (bad) website
       city: leadData.city,
       source: leadData.source || 'google_maps', // where we found them
-      status: STATUS.NEW,
+      outreach_status: STATUS.NEW,
+      status: 'active', // lifecycle status
       created_at: new Date().toISOString(),
     }]);
 
@@ -67,7 +80,7 @@ async function getNewLeads(limit = 50) {
   const { data, error } = await supabase
     .from('leads')
     .select('*')
-    .eq('status', STATUS.NEW)
+    .eq('outreach_status', STATUS.NEW)
     .limit(limit)
     .order('created_at', { ascending: true });
 
@@ -84,7 +97,7 @@ async function getLeadsForFollowup1() {
   const { data, error } = await supabase
     .from('leads')
     .select('*')
-    .eq('status', STATUS.CONTACTED)
+    .eq('outreach_status', STATUS.CONTACTED)
     .lt('last_contacted_at', threeDaysAgo.toISOString());
 
   if (error) throw error;
@@ -99,7 +112,7 @@ async function getLeadsForFollowup2() {
   const { data, error } = await supabase
     .from('leads')
     .select('*')
-    .eq('status', STATUS.FOLLOWUP_1)
+    .eq('outreach_status', STATUS.FOLLOWUP_1)
     .lt('last_contacted_at', sevenDaysAgo.toISOString());
 
   if (error) throw error;
@@ -111,7 +124,7 @@ async function updateLeadStatus(leadId, newStatus, extraData = {}) {
   const { error } = await supabase
     .from('leads')
     .update({
-      status: newStatus,
+      outreach_status: newStatus,
       last_contacted_at: new Date().toISOString(),
       ...extraData
     })

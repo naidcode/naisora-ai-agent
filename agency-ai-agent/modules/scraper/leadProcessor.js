@@ -16,14 +16,21 @@
 // Score 40+  → WARM (has website but weak presence)
 // Score <40  → COLD (already well-established, low ROI)
 
-require("dotenv").config();
-const { createClient } = require("@supabase/supabase-js");
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
-);
+const { supabase } = require('../../config/database');
+const { sendMessage } = require('../../config/telegram');
 
 // ─── Indian phone number normaliser ──────────────────────────────────────────
 function normalisePhone(raw) {
@@ -296,7 +303,7 @@ async function processLeads(rawLeads, saveToDb = true) {
   console.log(`   ❌ Invalid/skip : ${invalid.length}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-  await sendTelegramAlert(
+  await sendMessage(
     `⚙️ *Lead Processing Complete*\n\n` +
       `Processed: ${processed.length} leads\n` +
       `🔥 Hot (outreach now): *${stats.hot}*\n` +

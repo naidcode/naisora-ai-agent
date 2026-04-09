@@ -1,8 +1,19 @@
-const { createClient } = require('@supabase/supabase-js');
-const { sendMessage } = require('../../config/telegram');
-const Anthropic = require('@anthropic-ai/sdk');
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const { supabase } = require('../../config/database');
+const { sendMessage } = require('../../config/telegram');
+const { askClaude } = require('../../config/claude');
 
 const ACCOUNTS = {
   personal: {
@@ -39,10 +50,10 @@ const WEEKLY_STRUCTURE = [
 ];
 
 async function generatePostContent(account, postSlot) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const weekStart = new Date().toLocaleDateString('en-IN', { month: 'long', day: 'numeric', year: 'numeric' });
 
   let formatInstructions = '';
+  // ... (keeping the same format instructions logic)
   if (postSlot.type === 'Reel') {
     formatInstructions = `REEL PLAN:\nTopic: [Specific reel topic]\nHook (first 3 seconds): [Exact opening line]\nScript outline:\n  - 0-3s: [Hook]\n  - 3-10s: [Problem]\n  - 10-25s: [Solution]\n  - 25-30s: [CTA]\nAudio style: [Trending/Emotional/Upbeat]\nCaption (2-3 lines): [Actual caption]\nCTA: [Clear call to action]\nHashtags: [15 hashtags]`;
   }
@@ -58,13 +69,7 @@ async function generatePostContent(account, postSlot) {
 
   const prompt = `You are a social media content strategist for Indian creators and agencies.\n\nCreate a detailed ${postSlot.type} content plan for:\n\nPlatform: ${account.platform}\nHandle: @${account.handle}\nNiche: ${account.niche}\nGoal: ${account.goal}\nTarget audience: ${account.audience}\nContent style: ${account.content_style}\nPost day: ${postSlot.day}\nPost time: ${postSlot.posting_time}\nPurpose: ${postSlot.purpose}\nWeek of: ${weekStart}\n\n${formatInstructions}\n\nRules:\n- Everything specific and actionable\n- Hooks must stop the scroll immediately\n- Write for Indian audience\n- @naisora.official — tie content to restaurant owner pain points\n- @nahidpasha01 — personal journey + web design / AI education\n- LinkedIn — professional tone, thought leadership`;
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 800,
-    messages: [{ role: 'user', content: prompt }]
-  });
-
-  return response.content[0].text;
+  return await askClaude(prompt, 800);
 }
 
 async function savePlanToSupabase(handle, weeklyPlan) {

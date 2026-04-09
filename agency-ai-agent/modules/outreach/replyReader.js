@@ -3,15 +3,26 @@
 // Checks Twilio every 2 hours for incoming WhatsApp replies
 // Saves new replies to Supabase, triggers replyAnalyser automatically
 
-require('dotenv').config();
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
+
 const twilio = require('twilio');
-const { createClient } = require('@supabase/supabase-js');
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
-const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const { supabase } = require('../../config/database');
+const { sendMessage } = require('../../config/telegram');
 
 // ─── Fetch messages from Twilio ───────────────────────────────────────────────
 async function fetchTwilioReplies(hoursBack = 2) {
+  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
   const since = new Date();
   since.setHours(since.getHours() - hoursBack);
 

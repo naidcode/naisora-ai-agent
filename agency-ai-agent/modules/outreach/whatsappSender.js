@@ -1,14 +1,21 @@
 // modules/outreach/whatsappSender.js
 // Naisora AI Agent — WhatsApp Sender (Clean v3)
 
-require('dotenv').config();
-const { createClient } = require('@supabase/supabase-js');
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+const { supabase } = require('../../config/database');
+const { sendMessage } = require('../../config/telegram');
 
 const DAILY_LIMIT = 30;
 
@@ -120,7 +127,7 @@ async function sendDailyWhatsApp() {
 
   if (!leads || leads.length === 0) {
     console.log('📭 No new hot leads to contact today.');
-    await sendTelegramAlert('📭 WhatsApp Outreach: No new hot leads today. Run scraper to find more.');
+    await sendMessage('📭 WhatsApp Outreach: No new hot leads today. Run scraper to find more.');
     return;
   }
 
@@ -159,7 +166,7 @@ async function sendDailyWhatsApp() {
   console.log(`📊 WhatsApp Summary: ${sent} sent, ${failed} failed`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  await sendTelegramAlert(
+  await sendMessage(
     `📱 *WhatsApp Outreach Complete*\n\n` +
     `✅ Sent: ${sent}\n` +
     `❌ Failed: ${failed}\n` +
@@ -214,7 +221,7 @@ async function sendFollowUp() {
   }
 
   console.log(`✅ Follow-ups sent: ${sent}`);
-  await sendTelegramAlert(`🔄 Follow-ups sent: ${sent} WhatsApp messages`);
+  await sendMessage(`🔄 Follow-ups sent: ${sent} WhatsApp messages`);
 }
 
 module.exports = { sendDailyWhatsApp, sendWhatsApp, sendFollowUp };

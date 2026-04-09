@@ -18,17 +18,26 @@ envContent.split('\n').forEach(line => {
 async function runTest() {
 
   // PASTE YOUR COMMAND HERE — replace what is below
-const { createClient } = require('@supabase/supabase-js');
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+// Inside runTest() in test.js
+// Inside runTest() in test.js
 
-const { data } = await supabase
-  .from('leads')
-  .select('business_name, email, lead_category, outreach_status')
-  .not('email', 'is', null)
-  .limit(10);
+// Inside runTest() in test.js
 
-console.log('Leads with emails:', data?.length);
-data?.forEach(l => console.log('-', l.business_name, '|', l.email, '|', l.lead_category, '|', l.outreach_status));
+const { run } = require('./modules/content/blogWriter');
+await run({
+  clientId: 'naisora',
+  restaurantName: 'Naisora Agency',
+  topic: 'Why every restaurant in Bangalore needs a website in 2026 — not just a Zomato page',
+  blogType: 'local_seo',
+  area: 'Bangalore',
+  cuisine: 'web design agency for restaurants',
+  keywords: ['restaurant website Bangalore', 'web design for restaurants', 'restaurant SEO Bangalore']
+});
+
+await sendMessage(
+  `🔑 *Keyword Research — Naisora*\n\n` +
+  `${JSON.stringify(result, null, 2)}`
+);
 
 }
 

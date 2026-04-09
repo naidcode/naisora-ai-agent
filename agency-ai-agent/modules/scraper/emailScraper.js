@@ -4,15 +4,22 @@
 // Also checks Zomato and Facebook pages if no email found on website
 // Runs after lead processor — enriches leads that have websites
 
-require('dotenv').config();
-const puppeteer = require('puppeteer');
-const { createClient } = require('@supabase/supabase-js');
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+const puppeteer = require('puppeteer');
+const { supabase } = require('../../config/database');
+const { sendMessage } = require('../../config/telegram');
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const randomDelay = (min = 1000, max = 3000) =>
@@ -77,8 +84,17 @@ function scoreEmails(emails, websiteDomain) {
 // ─── Extract email from a single page ────────────────────────────────────────
 async function extractEmailsFromPage(page, url) {
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await randomDelay(1000, 2000);
+    // ── Robust Navigation with Retries ──
+    try {
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    } catch (e) {
+      try {
+        await page.goto(url, { waitUntil: 'load', timeout: 30000 });
+      } catch (e2) {
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+      }
+    }
+    await randomDelay(1000, 2500);
 
     const content = await page.evaluate(() => document.body.innerText + ' ' + document.body.innerHTML);
     const emails = content.match(EMAIL_REGEX) || [];
@@ -135,7 +151,7 @@ async function scrapeEmailFromZomato(page, businessName, area) {
     const searchQuery = encodeURIComponent(`${businessName} ${area} Bangalore`);
     await page.goto(
       `https://www.zomato.com/search?q=${searchQuery}`,
-      { waitUntil: 'domcontentloaded', timeout: 15000 }
+      { waitUntil: 'domcontentloaded', timeout: 60000 }
     );
     await randomDelay(2000, 3000);
 
@@ -174,7 +190,26 @@ async function scrapeEmailsForLeads(limit = 50) {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-sync',
+      '--disable-translate',
+      '--hide-scrollbars',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--no-first-run',
+      '--safebrowsing-disable-auto-update'
+    ],
+    timeout: 60000
   });
 
   const page = await browser.newPage();
@@ -226,7 +261,7 @@ async function scrapeEmailsForLeads(limit = 50) {
   console.log(`📊 Email Scraping: ${found} found, ${notFound} not found`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
-  await sendTelegramAlert(
+  await sendMessage(
     `📧 *Email Scraping Complete*\n\n` +
     `✅ Emails found: ${found}\n` +
     `❌ Not found: ${notFound}\n` +
@@ -242,7 +277,26 @@ async function scrapeEmailForLead(lead) {
 
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-zygote',
+      '--disable-web-security',
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-extensions',
+      '--disable-sync',
+      '--disable-translate',
+      '--hide-scrollbars',
+      '--metrics-recording-only',
+      '--mute-audio',
+      '--no-first-run',
+      '--safebrowsing-disable-auto-update'
+    ],
+    timeout: 60000
   });
 
   const page = await browser.newPage();

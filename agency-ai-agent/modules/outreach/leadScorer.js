@@ -3,10 +3,21 @@
 // Updates lead scores based on behaviour (replies, engagement, time)
 // Also generates daily priority list for manual outreach
 
-const { createClient } = require('@supabase/supabase-js');
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+const { supabase } = require('../../config/database');
+const { sendMessage } = require('../../config/telegram');
 
 // ─── Re-score lead after reply ────────────────────────────────────────────────
 async function rescoreAfterReply(leadId, sentiment) {
@@ -78,7 +89,7 @@ async function generateDailyPriorities() {
     msg += `No priority leads today. Run scraper to find more hot leads.`;
   }
 
-  await sendTelegramAlert(msg);
+  await sendMessage(msg);
   console.log('✅ Daily priority report sent to Telegram');
 }
 
@@ -108,7 +119,7 @@ async function weeklyPipelineSummary() {
     `🚫 Blacklisted: ${counts['blacklisted'] || 0}\n\n` +
     `Total leads in system: ${pipeline.length}`;
 
-  await sendTelegramAlert(msg);
+  await sendMessage(msg);
 }
 
 module.exports = { rescoreAfterReply, generateDailyPriorities, weeklyPipelineSummary };
