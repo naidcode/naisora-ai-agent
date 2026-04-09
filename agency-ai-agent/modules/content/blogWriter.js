@@ -1,11 +1,19 @@
-const Anthropic = require("@anthropic-ai/sdk");
-const { createClient } = require("@supabase/supabase-js");
-const { sendMessage } = require("../../config/telegram");
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
-);
+const { askClaudeSonnet } = require("../../config/claude");
+const { supabase } = require("../../config/database");
+const { sendMessage } = require("../../config/telegram");
 
 const BLOG_TYPES = {
   local_seo: {
@@ -73,7 +81,7 @@ async function writeBlog(params) {
     keywords = [],
   } = params;
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
   const typeConfig = BLOG_TYPES[blogType];
 
   const prompt = `You are an expert food and restaurant blogger writing for ${restaurantName} in ${area}, Bangalore.
@@ -110,13 +118,7 @@ TAGS: [5-8 relevant tags separated by commas]
 
 Write naturally. Make the restaurant sound genuinely great, not fake.`;
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 2000,
-    messages: [{ role: "user", content: prompt }],
-  });
-
-  const blogText = response.content[0].text;
+  const blogText = await askClaudeSonnet(prompt);
 
   const titleMatch = blogText.match(/TITLE:\s*(.+)/);
   const metaMatch = blogText.match(/META DESCRIPTION:\s*(.+)/);

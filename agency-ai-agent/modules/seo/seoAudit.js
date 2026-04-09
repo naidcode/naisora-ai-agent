@@ -4,17 +4,24 @@
 // Used to write powerful cold emails: "Your site scores 34/100, competitor scores 78"
 // Also generates the free audit report we send to interested leads
 
-require('dotenv').config();
+// Load .env directly — dotenv was adding hidden \r characters to keys
+const fs = require('fs');
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
+
 const puppeteer = require('puppeteer');
 const { fullAudit } = require('./pagespeedAudit');
 const { askClaudeSonnet } = require('../../config/claude');
-const { createClient } = require('@supabase/supabase-js');
-const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
-);
+const { supabase } = require('../../config/database');
+const { sendMessage } = require('../../config/telegram');
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 
