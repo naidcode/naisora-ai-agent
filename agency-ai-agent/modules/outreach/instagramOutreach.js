@@ -49,7 +49,7 @@ function loadSession() {
 // ─── Launch browser ───────────────────────────────────────────────────────────
 async function launchBrowser() {
   return await puppeteer.launch({
-    headless: false, // Instagram needs real browser to avoid detection
+    headless: true, // Instagram needs real browser to avoid detection, but true needed if no X server
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
