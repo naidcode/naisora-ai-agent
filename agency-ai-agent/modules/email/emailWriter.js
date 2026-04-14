@@ -15,61 +15,66 @@ const { supabase } = require('../../config/database');
 const { askClaude, askClaudeSonnet } = require('../../config/claude');
 
 // NAISORA COLD EMAIL RULES:
-// 1. Never mention SEO — always translate to business outcomes
-// 2. Lead with their audit score and competitor comparison
-// 3. Close with a specific result guarantee
+// 1. Never mention SEO metrics alone — connect to professional brand image
+// 2. Lead with their lack of website or outdated design
+// 3. Focus on "Digital Storefront" and "Local Search Visibility"
 // 4. Keep it under 150 words — restaurant owners don't read long emails
-// 5. Always personalise — use restaurant name, area, specific problem
+// 5. Always personalise — use restaurant name, area, specific design gap
 
 const PAIN_POINTS = {
-  low_score: (score) => `Your restaurant scores ${score}/100 on Google visibility`,
-  competitor: (name, area) => `${name} in ${area} is ranking above you and taking your customers`,
-  zomato: `You're paying Zomato 20-30% commission on every order`,
-  empty_tables: `Empty tables during off-peak hours`,
-  no_website: `Customers can't find your menu, timings, or contact online`
+  low_score: (score) => `Your restaurant's online storefront scores ${score}/100 for design and visibility`,
+  competitor: (name, area) => `${name} in ${area} has a professional site and is taking all the local searches`,
+  no_presence: `People in ${area} are searching for food, but they can't see your menu or space online`,
+  outdated: `Your current site looks outdated and doesn't match the quality of your food`,
+  no_website: `Customers can't find your menu, timings, or a professional photo of your food online`
 };
 
 const GUARANTEES = {
-  visibility: `If you don't rank higher on Google in 30 days, full refund`,
-  website: `Professional website live in 7 days or you don't pay`,
-  orders: `More direct orders within 60 days or we work for free`
+  visibility: `We'll make sure you show up correctly on Google Maps in 30 days`,
+  website: `Professional, modern website live in 7 days — designed to match your brand`,
+  audit: `Free professional design and local search audit for ${new Date().getFullYear()}`
 };
 
 async function writeEmail(lead) {
   const seoScore = lead.seo_score || Math.floor(Math.random() * 30) + 25;
   const area = lead.address?.split(',').slice(-2, -1)[0]?.trim() || 'Bangalore';
 
-  const prompt = `You are writing a cold email for Naisora, an AI-powered web design agency in Bangalore that helps restaurants get more customers from Google.
+  const prompt = `You are writing a cold email for Naisora, a premium web design agency in Bangalore. We specialize in building professional digital storefronts for restaurants and cafes.
+  
+  CURRENT STRATEGY:
+  - We only target restaurants who either DON'T have a website or have an OLD/POOR design.
+  - We provide professional web design and Local SEO (we do NOT guarantee customers, only visibility and a professional look).
+  - We do not have case studies on our own site yet, so do not promise specific "more customer" results.
   
   STRICT RULES:
-  - Never use words: SEO, keywords, backlinks, meta tags, ranking algorithm, optimization
-  - Always use instead: "more customers from Google", "people searching for restaurants near you", "showing up when customers search", "beating your competitor online"
+  - Never use words: "backlinks", "ranking algorithm", "optimization"
+  - Focus instead: "professional look", "matching your food quality", "showing up on Google when people search nearby", "professional online storefront"
+  - Never guarantee "more orders" or "more customers". Guarantee a "professional image" and "local visibility".
   - Email must be under 150 words total
   - Must feel personal, not templated
-  - Subject line must create curiosity or urgency
-  - End with one clear question — not a pitch
+  - Subject line must create curiosity or urgency regarding their design or presence
   
   RESTAURANT DETAILS:
   Name: ${lead.business_name}
   Area: ${area}
   Phone: ${lead.phone || 'N/A'}
   Website: ${lead.website || 'No website found'}
-  Google visibility score: ${seoScore}/100
+  Digital Presence Score: ${seoScore}/100
   Category: ${lead.category || 'Restaurant'}
   
   Write the email in this format:
   
-  SUBJECT: [Subject line — under 8 words, creates curiosity]
+  SUBJECT: [Subject line — under 8 words]
   
   BODY:
-  [Email body — personal, outcome-focused, under 150 words]
+  [Email body — personal, design-focused, under 150 words]
   
   The email should:
-  1. Open with a specific observation about their restaurant (not generic)
-  2. Mention the ${seoScore}/100 score and what it means for their business in plain English
-  3. Tell them a competitor in ${area} is getting their customers
-  4. Show what Naisora fixed for a similar restaurant (invent a believable result — e.g. "helped a cafe in Koramangala go from 3 Google inquiries a week to 40")
-  5. Close with: "Can I send you the free report for ${lead.business_name}?" or similar
+  1. Open with a specific observation about their restaurant (e.g. "I love the vibe of your cafe from the photos")
+  2. Mention the ${seoScore}/100 score and how it relates to their missing or outdated digital storefront
+  3. Explain that people in ${area} are searching for places like theirs but can't find a professional site/menu
+  4. Offer to build them a professional website that matches the quality of their food
+  5. Close with: "Can I send you a free concept design/audit for ${lead.business_name}?"
   6. Sign off as: Nahid | Naisora | hello@naisora.com`;
 
   const emailText = await askClaudeSonnet(prompt);
@@ -79,7 +84,7 @@ async function writeEmail(lead) {
   const bodyMatch = emailText.match(/BODY:\s*([\s\S]+)/);
 
   return {
-    subject: subjectMatch ? subjectMatch[1].trim() : `Quick question about ${lead.business_name}`,
+    subject: subjectMatch ? subjectMatch[1].trim() : `Quick question about ${lead.business_name}'s website`,
     body: bodyMatch ? bodyMatch[1].trim() : emailText,
     lead_id: lead.id,
     seo_score: seoScore,
@@ -91,13 +96,13 @@ async function writeFollowUpEmail(lead, followUpDay) {
   const templates = {
     3: {
       tone: 'casual check-in, no pressure',
-      angle: 'Did my email get buried? Happens to me too. Just wanted to make sure you saw the free report offer.',
-      cta: 'Worth 2 minutes to take a look?'
+      angle: 'Did my email about your digital storefront get buried? Just wanted to make sure you saw the offer for a free presence audit.',
+      cta: 'Worth 2 minutes to see how you look to local searchers?'
     },
     7: {
       tone: 'light urgency, final follow-up',
-      angle: `This is my last email — I don't want to spam you. But I did notice ${lead.business_name} still isn't showing up when people search for restaurants in your area. That's customers going to your competitors.`,
-      cta: 'If you want the free audit before I close it, just reply with "yes".'
+      angle: `This is my last email — I don't want to spam you. But I did notice ${lead.business_name} still doesn't have a professional site for people searching in ${lead.area}.`,
+      cta: 'If you want the free audit/concept before I close this, just reply with "yes".'
     }
   };
 

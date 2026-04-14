@@ -1,27 +1,47 @@
 // modules/outreach/whatsappWriter.js
-// Naisora AI Agent — WhatsApp Message Writer
-// Uses Sonnet to write personalised WhatsApp cold messages
-// RULES: Never say SEO. Never say "digital marketing". Lead with their problem.
-// Always: audit score + competitor comparison + result guarantee
+// Naisora AI Growth OS — WhatsApp Message Writer (A/B Variant Aware)
+// Variant A: Lead with PROBLEM (what they're losing)
+// Variant B: Lead with PROOF (what we've achieved for similar businesses)
 
 const { askClaudeSonnet } = require('../../config/claude');
+const { supabase } = require('../../config/database');
+
+// ─── Load the currently winning variant from system_config ────────────────────
+async function getActiveVariant() {
+  try {
+    const { data } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('key', 'active_outreach_variant')
+      .single();
+    return data?.value || 'A';
+  } catch {
+    return 'A'; // safe default
+  }
+}
 
 // ─── System prompt — the most important part ─────────────────────────────────
-const WHATSAPP_SYSTEM = `You write cold WhatsApp outreach messages for Naisora, a web design agency in Bangalore that helps restaurants get more customers from Google.
+const WHATSAPP_SYSTEM = `You write hyper-personalized, high-conversion WhatsApp outreach messages for Naisora, a premium Bangalore web design agency. Your goal is to get restaurant owners to say "YES" to a free design audit or website concept.
 
-RULES — follow all of these exactly:
-1. NEVER say "SEO", "digital marketing", "optimize", "rankings", "keywords"
-2. ALWAYS translate to business language: "more customers from Google", "people find you first", "stop paying Zomato commission"
-3. Lead with THEIR specific problem — use their name, area, rating, review count
-4. Keep it SHORT — max 5-6 sentences for WhatsApp
-5. Sound like a real person, not a salesperson
-6. ONE clear call to action at the end — "Want me to send you the free audit?"
-7. Close with name and agency: — Nahid, Naisora
-8. Never use formal greetings like "Dear" or "Greetings"
-9. If they have no website — make that the main pain point
-10. If they have a website — mention their competitor ranks above them
+STRATEGY:
+- Target restaurants without a website or with a poor/old design.
+- Offer: Professional Web Design + Local SEO visibility.
+- DO NOT guarantee customers or orders (only visibility and professional look).
+- DO NOT use case studies/results we haven't achieved yet.
 
-OUTPUT: Only the WhatsApp message. No subject line. No explanation.`;
+RULES — follow all of these strictly:
+1. NEVER use corporate jargon like "ROI", "SEO", "optimization", or "digital marketing".
+2. TALK like a local expert: Use phrases like "professional look", "found on Google Maps", "proper digital storefront in [Area]".
+3. LEVERAGE LOSS AVERSION: Explain how they look to people searching right now (e.g., "People are searching for places in [Area], but your online storefront doesn't match your quality").
+4. BE PITHY: 3-5 short sentences.
+5. NO SALES VOX: Sound like a helpful neighbor who is a design expert.
+6. TARGETED PAIN: 
+   - No website? -> "You're invisible to people searching for food in [Area] right now."
+   - Bad design? -> "Your food is great but your site doesn't reflect that quality yet."
+7. CTA: End with a low-friction question: "Should I send over a free website concept/audit?"
+8. CLOSING: "— Nahid, Naisora"
+
+OUTPUT: Only the WhatsApp message text. No subject lines, no intro, no emojis (unless it's a single 📱).`;
 
 // ─── Build context for the message writer ────────────────────────────────────
 function buildContext(lead) {
@@ -30,9 +50,10 @@ function buildContext(lead) {
   const fewReviews = lead.review_count < 50;
 
   let painPoints = [];
-  if (noWebsite) painPoints.push('no website');
+  if (noWebsite) painPoints.push('no website (invisible online)');
+  if (!noWebsite) painPoints.push('outdated/basic website design');
   if (lowRating) painPoints.push(`only ${lead.rating} stars on Google`);
-  if (fewReviews) painPoints.push(`only ${lead.review_count} Google reviews`);
+  if (fewReviews) painPoints.push(`low review count`);
 
   return `
 Business name: ${lead.business_name}
@@ -41,29 +62,36 @@ Category: ${lead.category || 'restaurant'}
 Has website: ${lead.has_website ? 'Yes — ' + lead.website : 'NO WEBSITE'}
 Rating: ${lead.rating || 'unknown'} stars
 Reviews: ${lead.review_count || 0} reviews
-Lead score: ${lead.lead_score}/100
-Main pain points: ${painPoints.join(', ') || 'low online visibility'}
-Score reasons: ${lead.score_reasons ? lead.score_reasons.join(', ') : 'needs online presence'}
+Main pain points: ${painPoints.join(', ')}
 `;
 }
 
-// ─── Write cold WhatsApp message ──────────────────────────────────────────────
+// ─── Write cold WhatsApp message (A/B Variant Aware) ─────────────────────────
 async function writeWhatsAppMessage(lead) {
   const context = buildContext(lead);
+  const variant = await getActiveVariant();
+
+  // Variant A: Lead with DESIGN/PROFESSIONALISM gap
+  // Variant B: Lead with LOCAL SEARCH visibility
+  const variantInstruction = variant === 'B'
+    ? `Focus on LOCAL SEARCH: People in ${lead.area} are searching for ${lead.category || 'food'} right now, but they can't see a professional site for them. Mention being found on Maps.`
+    : `Focus on DESIGN QUALITY: Their current presence (or lack thereof) doesn't match the quality of their food. Talk about a "Professional Digital Storefront".`;
 
   const prompt = `Write a WhatsApp cold outreach message for this restaurant owner:
 
 ${context}
 
-The message should feel like a local Bangalore agency owner reaching out personally after seeing their restaurant on Google Maps. Reference specific details about their business.`;
+APPROACH FOR THIS MESSAGE:
+${variantInstruction}
+
+The message should feel like a local Bangalore agency owner reaching out personally. Max 5 sentences.`;
 
   try {
     const message = await askClaudeSonnet(prompt, WHATSAPP_SYSTEM, 300);
-    return message.trim();
+    return { message: message.trim(), variant };
   } catch (err) {
     console.error('WhatsApp writer error:', err.message);
-    // Fallback template if API fails
-    return buildFallbackMessage(lead);
+    return { message: buildFallbackMessage(lead), variant };
   }
 }
 
@@ -72,10 +100,10 @@ function buildFallbackMessage(lead) {
   const noWebsite = !lead.has_website;
 
   if (noWebsite) {
-    return `Hi, I noticed ${lead.business_name} in ${lead.area} doesn't have a website yet. A lot of people search "restaurants near ${lead.area}" on Google and your competitors are showing up — you're not. I help Bangalore restaurants fix this and get direct customers without paying Zomato 30% commission. Want me to send you a free audit showing exactly what's missing? — Nahid, Naisora`;
+    return `Hi, I noticed ${lead.business_name} in ${lead.area} doesn't have a website yet. People searching for restaurants in ${lead.area} on Google can't see your menu or vibe. I build professional digital storefronts for restaurants here in Bangalore. Want me to send over a free website concept and local audit? — Nahid, Naisora`;
   }
 
-  return `Hi, I was looking at restaurants in ${lead.area} on Google and noticed ${lead.business_name} is showing up below some of your competitors. I ran a quick check and found a few things that are easy to fix. I help Bangalore restaurants get more customers from Google — completely free audit to start, results in 30 days or I work free. Want me to send it over? — Nahid, Naisora`;
+  return `Hi, I was looking at ${lead.business_name} online and noticed your site design doesn't quite match the quality of your food. I help Bangalore restaurants upgrade to professional, modern websites that show up better on Google Maps. Would you like a free 2-min design audit? — Nahid, Naisora`;
 }
 
 // ─── Write follow-up WhatsApp (Day 3) ────────────────────────────────────────
@@ -83,16 +111,16 @@ async function writeFollowUpMessage(lead) {
   const prompt = `Write a short WhatsApp follow-up message for a restaurant owner who didn't reply to our first message 3 days ago.
 
 Business: ${lead.business_name}, ${lead.area}
-First message was about: ${lead.has_website ? 'improving their Google visibility' : 'building them a website to get Google customers'}
+Topic: ${lead.has_website ? 'upgrading their website design' : 'building a professional digital storefront'}
 
-Keep it very short — 2-3 sentences max. Casual, not pushy. Remind them about the free audit offer.`;
+Keep it very short — 2 sentences max. Casual. Remind them about the free design concept/audit offer.`;
 
   try {
     const message = await askClaudeSonnet(prompt, WHATSAPP_SYSTEM, 150);
-    return message.trim();
+    return { message: message.trim(), variant: 'followup' };
   } catch (err) {
-    return `Hi again — just checking if you had a chance to see my message about ${lead.business_name}. Happy to share the free audit whenever suits you. — Nahid, Naisora`;
+    return { message: `Hi again — just checking if you'd like that free design concept for ${lead.business_name}. No pressure, just thought it'd be helpful. — Nahid, Naisora`, variant: 'followup' };
   }
 }
 
-module.exports = { writeWhatsAppMessage, writeFollowUpMessage };
+module.exports = { writeWhatsAppMessage, writeFollowUpMessage, getActiveVariant };

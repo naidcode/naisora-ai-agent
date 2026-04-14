@@ -49,6 +49,10 @@ const {
 } = require("./modules/reporting/financialTracker");
 const { generateReelIdeas } = require("./modules/social/reelIdeasGenerator");
 const { getRestaurantHashtags } = require("./modules/social/hashtagResearcher");
+const { startAutoPilot } = require("./system/autoPilot");
+const { selectBestLeads } = require("./brain/leadSelector");
+const { runFollowUpEngine } = require("./modules/outreach/followUpEngine");
+const { isStopped, stopAgent, startAgent } = require("./system/masterSwitch");
 
 // ─── Detect if running on Railway (no interactive menu on server) ─────────────
 const IS_RAILWAY =
@@ -82,12 +86,17 @@ async function showMenu() {
     console.log("  16 — Research keywords for a restaurant");
     console.log("  17 — Run technical audit on a website");
     console.log("  18 — Run weekly SEO engine (all clients)");
+    console.log("  24 — 🔥 START AI GROWTH OS (Autonomous)");
+    console.log("  25 — 🎯 Select top leads for today");
+    console.log("  26 — 🔄 Run follow-up engine now");
+    console.log("  27 — 📊 Generate mini audit for a lead");
+    console.log(`  ${isStopped() ? "OFF" : "ON "} — [${isStopped() ? "🔴 STOPPED" : "🟢 ACTIVE"}] — ${isStopped() ? "99 (UNPAUSE AGENT)" : "99 (KILL SWITCH)"}`);
     console.log("  0  — Exit\n");
 
     rl.question("Choose: ", async (choice) => {
       try {
         switch (choice.trim()) {
-          case "7":
+          case "7": {
             console.log(
               "\n🗺️  Test scrape: Koramangala restaurants (5 leads)...",
             );
@@ -99,8 +108,9 @@ async function showMenu() {
             ];
             await deduplicateLeads(allTest);
             break;
+          }
 
-          case "8":
+          case "8": {
             console.log("\n🗺️  Full scrape: 5 areas, restaurants + cafes...");
             const rawLeads = await runFullScrape({
               areas: [
@@ -117,6 +127,7 @@ async function showMenu() {
             const allLeads = [...processed.hot_leads, ...processed.warm_leads];
             await deduplicateLeads(allLeads);
             break;
+          }
 
           case "9":
             console.log("\n📱 Sending WhatsApp outreach to hot leads...");
@@ -153,7 +164,7 @@ async function showMenu() {
             await publishApprovedDrafts();
             break;
 
-          case "16":
+          case "16": {
             console.log("\n🔍 Researching keywords...");
             const keywords = await researchKeywords({
               name: "Test Restaurant",
@@ -162,16 +173,18 @@ async function showMenu() {
             });
             console.log("Keywords found:", keywords.length);
             break;
+          }
 
-          case "17":
+          case "17": {
             console.log("\n⚙️  Running technical audit on naisora.com...");
-            const audit = await runTechnicalAudit("naisora.com");
-            console.log("Score:", audit.score + "/100");
+            const techAudit = await runTechnicalAudit("naisora.com");
+            console.log("Score:", techAudit.score + "/100");
             console.log(
               "Issues:",
-              audit.issues.map((i) => i.issue).join(", ") || "None",
+              techAudit.issues.map((i) => i.issue).join(", ") || "None",
             );
             break;
+          }
 
           case "18":
             console.log("\n🚀 Running weekly SEO engine...");
@@ -190,15 +203,56 @@ async function showMenu() {
             await weeklyFinancialSummary();
             break;
 
-          case "22":
+          case "22": {
             const reels = await generateReelIdeas(5);
             console.log(reels);
             break;
+          }
 
-          case "23":
+          case "23": {
             const tags = await getRestaurantHashtags();
             console.log(tags);
             break;
+          }
+            
+          case "24":
+            console.log("\n🚀 Initializing Naisora AI Growth OS...");
+            await startAutoPilot();
+            break;
+
+          case "25": {
+            console.log("\n🎯 Selecting top 50 leads for today...");
+            const bestLeads = await selectBestLeads(50);
+            console.log(`\nTop 5 leads:`);
+            bestLeads.slice(0, 5).forEach((l, i) => {
+              console.log(`  ${i + 1}. ${l.business_name} (${l.area}) — Score: ${l.computed_score}`);
+            });
+            break;
+          }
+
+          case "26": {
+            console.log("\n🔄 Running follow-up engine...");
+            const fuResult = await runFollowUpEngine();
+            console.log(`Follow-ups sent: ${fuResult.sent}`);
+            break;
+          }
+
+          case "27": {
+            console.log("\n📊 Generating mini audit for test lead...");
+            const auditLead = { id: 'test', business_name: 'Test Restaurant', area: 'Koramangala', category: 'restaurant', has_website: false, review_count: 15, rating: 3.9 };
+            const miniAuditResult = await generateMiniAudit(auditLead);
+            console.log(formatAuditForWhatsApp(auditLead, miniAuditResult));
+            break;
+          }
+
+          case "99": {
+            if (isStopped()) {
+              startAgent();
+            } else {
+              stopAgent();
+            }
+            break;
+          }
 
           case "0":
             console.log("👋 Stopping agent. Bye!");
@@ -237,7 +291,16 @@ async function startAgent() {
 
   console.log("🚀 Starting up...\n");
   console.log("─".repeat(42));
-  console.log("\n📡 Testing all connections...\n");
+  
+  if (isStopped()) {
+    console.log("🛑 WARNING: Agent is currently STOPPED (Kill Switch is ON).");
+    console.log("   Automation, crons, and cycles will be SKIPPED.");
+    console.log("   To resume, use option 99 in the menu.\n");
+  } else {
+    console.log("🟢 STATUS: Agent is ACTIVE and ready.\n");
+  }
+
+  console.log("📡 Testing all connections...\n");
 
   const results = {
     claude: false,

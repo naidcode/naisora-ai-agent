@@ -1,9 +1,8 @@
 // modules/outreach/replyReader.js
 // Naisora AI Agent — WhatsApp Reply Reader
 // Checks Twilio every 2 hours for incoming WhatsApp replies
-// Saves new replies to Supabase, triggers replyAnalyser automatically
+// Saves new replies to Supabase, triggers replyAnalyser + call booking automatically
 
-// Load .env directly — dotenv was adding hidden \r characters to keys
 const fs = require('fs');
 if (fs.existsSync('.env')) {
   const envContent = fs.readFileSync('.env', 'utf8');
@@ -31,8 +30,6 @@ async function fetchTwilioReplies(hoursBack = 2) {
       to: process.env.TWILIO_WHATSAPP_NUMBER,
       dateSentAfter: since,
     });
-
-    // Only inbound messages (replies from restaurant owners)
     return messages.filter(m => m.direction === 'inbound');
   } catch (err) {
     console.error('Twilio fetch error:', err.message);
@@ -42,15 +39,12 @@ async function fetchTwilioReplies(hoursBack = 2) {
 
 // ─── Match reply to lead in Supabase ─────────────────────────────────────────
 async function matchReplyToLead(fromNumber) {
-  // Twilio sends numbers as whatsapp:+91XXXXXXXXXX — normalise
   const normalised = fromNumber.replace('whatsapp:', '');
-
   const { data } = await supabase
     .from('leads')
     .select('*')
     .eq('phone', normalised)
     .single();
-
   return data || null;
 }
 
@@ -61,13 +55,11 @@ async function replyAlreadySaved(twilioSid) {
     .select('id')
     .eq('twilio_sid', twilioSid)
     .single();
-
   return !!data;
 }
 
 // ─── Save reply to outreach_log ───────────────────────────────────────────────
 async function saveReply(lead, message) {
-  // Save to outreach_log
   await supabase.from('outreach_log').insert({
     lead_id: lead.id,
     channel: 'whatsapp',
@@ -78,7 +70,6 @@ async function saveReply(lead, message) {
     reply_text: message.body,
   });
 
-  // Update lead record
   await supabase
     .from('leads')
     .update({
@@ -87,6 +78,35 @@ async function saveReply(lead, message) {
       reply_received_at: new Date().toISOString(),
     })
     .eq('id', lead.id);
+}
+
+// ─── Call booking trigger — fires when a lead shows interest ─────────────────
+async function triggerCallBooking(lead, replyText) {
+  const interestSignals = [
+    'interested', 'yes', 'sure', 'okay', 'ok', 'tell me more',
+    'send', 'audit', 'how', 'what', 'price', 'cost', 'free', 'show me', 'when'
+  ];
+
+  const lowerReply = (replyText || '').toLowerCase();
+  const isInterested = interestSignals.some(signal => lowerReply.includes(signal));
+  if (!isInterested) return;
+
+  console.log(`   🔥 INTERESTED LEAD: ${lead.business_name} — triggering call booking alert`);
+
+  await supabase.from('leads').update({
+    outreach_status: 'interested',
+    interested_at: new Date().toISOString(),
+  }).eq('id', lead.id);
+
+  await sendMessage(
+    `🔥 *HOT LEAD — INTERESTED REPLY*\n\n` +
+    `Business: ${lead.business_name}\n` +
+    `Area: ${lead.area}\n` +
+    `Phone: ${lead.phone}\n\n` +
+    `Their reply: "${replyText}"\n\n` +
+    `⚡ Send this NOW:\n` +
+    `_"I can show you exactly how to fix this in 10 minutes — when are you free today?"_`
+  );
 }
 
 // ─── Main reply check function ────────────────────────────────────────────────
@@ -101,34 +121,27 @@ async function checkReplies() {
   }
 
   console.log(`   Found ${replies.length} incoming messages`);
-
   const newReplies = [];
 
   for (const message of replies) {
-    // Skip if already processed
     const alreadySaved = await replyAlreadySaved(message.sid);
     if (alreadySaved) continue;
 
-    // Match to a lead
     const lead = await matchReplyToLead(message.from);
-
     if (!lead) {
       console.log(`   ⚠️  Unknown number: ${message.from} — skipping`);
       continue;
     }
 
-    // Save the reply
     await saveReply(lead, message);
+    await triggerCallBooking(lead, message.body);
 
     console.log(`   💬 Reply from ${lead.business_name}: "${message.body.substring(0, 60)}..."`);
-
     newReplies.push({ lead, message: message.body });
   }
 
   if (newReplies.length > 0) {
     console.log(`\n✅ Saved ${newReplies.length} new replies — triggering analyser...`);
-
-    // Auto-trigger reply analyser for each new reply
     const { analyseReply } = require('./replyAnalyser');
     for (const { lead, message } of newReplies) {
       await analyseReply(lead, message);
@@ -138,4 +151,4 @@ async function checkReplies() {
   return newReplies;
 }
 
-module.exports = { checkReplies, fetchTwilioReplies };
+module.exports = { checkReplies, fetchTwilioReplies, triggerCallBooking };

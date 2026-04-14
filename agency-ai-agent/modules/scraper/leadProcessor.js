@@ -58,49 +58,48 @@ function scoreLead(lead) {
   let score = 0;
   const reasons = [];
 
-  // No website — our best opportunity
+  // No website — our PRIMARY target
   if (!lead.has_website) {
-    score += 40;
-    reasons.push("No website");
+    score += 50;
+    reasons.push("No website (foundational need)");
+  } else {
+    // If they HAVE a website, we only care if it's likely a "bad design"
+    // We proxy this with low ratings/reviews or if it's a very old business
+    score += 10; 
+    reasons.push("Redesign candidate");
   }
 
-  // Has phone — we can WhatsApp them
+  // Has phone — we can WhatsApp them (CRITICAL)
   if (lead.phone) {
     score += 20;
     reasons.push("Phone available");
   }
 
-  // Rating-based scoring
+  // Rating-based scoring (proxy for poor digital management/design)
   const rating = parseFloat(lead.rating) || 0;
-  if (rating > 0 && rating < 3.5) {
+  if (rating > 0 && rating < 3.8) {
     score += 15;
-    reasons.push("Low rating (needs help)");
-  } else if (rating >= 3.5 && rating < 4.0) {
-    score += 5;
-    reasons.push("Average rating (room to grow)");
+    reasons.push("Low rating (suggests poor online image)");
   }
 
   // Review count — low means low visibility
   const reviews = parseInt(lead.review_count) || 0;
   if (reviews < 50) {
-    score += 10;
-    reasons.push("Few reviews (low visibility)");
-  } else if (reviews < 100) {
-    score += 5;
-    reasons.push("Moderate reviews");
+    score += 15;
+    reasons.push("Low local visibility");
   }
 
-  // GBP not verified — easy win we can offer
+  // GBP not verified — easy win for local SEO
   if (!lead.gbp_verified) {
     score += 10;
     reasons.push("GBP not verified");
   }
 
-  // Cafes tend to close faster (owner is often on-site)
+  // Cafes/Coffee Shops close faster
   const category = (lead.category || "").toLowerCase();
   if (category.includes("cafe") || category.includes("coffee")) {
     score += 5;
-    reasons.push("Cafe (faster close)");
+    reasons.push("Cafe focus");
   }
 
   return { score, reasons };

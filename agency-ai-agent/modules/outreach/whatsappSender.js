@@ -17,7 +17,7 @@ if (fs.existsSync('.env')) {
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
 
-const DAILY_LIMIT = 30;
+const DAILY_LIMIT = 50;
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const randomDelay = () => delay(Math.floor(Math.random() * (8 * 60000 - 3 * 60000) + 3 * 60000));
@@ -50,7 +50,7 @@ async function getTodayCount() {
 }
 
 // Send a single WhatsApp message
-async function sendWhatsApp(lead, message) {
+async function sendWhatsApp(lead, message, variant = null) {
   const toNumber = `whatsapp:${lead.phone}`;
 
   try {
@@ -66,6 +66,7 @@ async function sendWhatsApp(lead, message) {
       channel: 'whatsapp',
       message_type: 'cold',
       message_text: message,
+      variant: variant || null,    // ← A/B tag for optimization engine
       sent_at: new Date().toISOString(),
       delivered: true,
       twilio_sid: result.sid,
@@ -92,6 +93,7 @@ async function sendWhatsApp(lead, message) {
       channel: 'whatsapp',
       message_type: 'cold',
       message_text: message,
+      variant: variant || null,    // ← A/B tag even on failed sends
       sent_at: new Date().toISOString(),
       delivered: false,
     });
@@ -144,9 +146,10 @@ async function sendDailyWhatsApp() {
 
     console.log(`\n📱 [${i + 1}/${leads.length}] Contacting: ${lead.business_name} (${lead.area})`);
 
-    const rawMessage = await writeWhatsAppMessage(lead);
+    // writeWhatsAppMessage now returns { message, variant }
+    const { message: rawMessage, variant } = await writeWhatsAppMessage(lead);
     const finalMessage = await humanize(rawMessage);
-    const result = await sendWhatsApp(lead, finalMessage);
+    const result = await sendWhatsApp(lead, finalMessage, variant);
 
     if (result.success) {
       sent++;
