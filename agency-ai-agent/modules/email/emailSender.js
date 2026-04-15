@@ -5,7 +5,7 @@
 // This protects your Gmail from being flagged
 // ============================================
 
-const { sendEmail } = require('../../config/gmail');
+const { sendEmail } = require('../../config/smtp');
 const { writeColdEmail } = require('./emailWriter');
 const { getNewLeads, updateLeadStatus, STATUS } = require('../../config/database');
 // Load .env directly — dotenv was adding hidden \r characters to keys

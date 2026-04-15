@@ -39,15 +39,20 @@ function normalisePhone(raw) {
   // Remove all non-digit characters
   let digits = raw.replace(/\D/g, "");
 
-  // Handle +91 prefix
-  if (digits.startsWith("91") && digits.length === 12) {
+  // Handle leading zero (common in India: 098...)
+  if (digits.length === 11 && digits.startsWith("0")) {
+    digits = digits.slice(1);
+  }
+
+  // Handle +91 prefix (9198...)
+  if (digits.length === 12 && digits.startsWith("91")) {
     digits = digits.slice(2);
   }
 
-  // Must be 10 digits for Indian mobile
+  // Must be 10 digits now
   if (digits.length !== 10) return null;
 
-  // Must start with 6, 7, 8, or 9 (Indian mobile)
+  // Must start with 6, 7, 8, or 9 (Indian mobile for WhatsApp)
   if (!["6", "7", "8", "9"].includes(digits[0])) return null;
 
   return `+91${digits}`;

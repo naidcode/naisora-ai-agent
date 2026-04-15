@@ -19,7 +19,7 @@ if (fs.existsSync('.env')) {
 
 const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
-const { testConnection: testGmail } = require("./config/gmail");
+const { testConnection: testEmail } = require("./config/smtp");
 const { testConnection: testTelegram } = require("./config/telegram");
 const { startAllJobs } = require("./scheduler/cronJobs");
 const {
@@ -305,7 +305,7 @@ async function startAgent() {
   const results = {
     claude: false,
     database: false,
-    gmail: false,
+    email: false,
     telegram: false,
   };
 
@@ -325,9 +325,9 @@ async function startAgent() {
   }
 
   try {
-    results.gmail = await testGmail();
+    results.email = await testEmail();
   } catch (e) {
-    console.error("❌ Gmail failed — will connect later");
+    console.error("❌ Email failed — check SMTP settings in .env");
   }
 
   try {
@@ -348,7 +348,7 @@ async function startAgent() {
     `  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📧 Gmail:        ${results.gmail ? "✅ Connected" : "❌ Failed"}`,
+    `  📧 Email:        ${results.email ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
@@ -365,8 +365,8 @@ async function startAgent() {
     console.log("Add ANTHROPIC_API_KEY to .env when ready.\n");
   }
 
-  if (!results.gmail) {
-    console.log("⚠️  Gmail not connected — email features disabled.\n");
+  if (!results.email) {
+    console.log("⚠️  Email not connected — outreach features disabled.\n");
   }
 
   console.log("\n" + "─".repeat(42));
