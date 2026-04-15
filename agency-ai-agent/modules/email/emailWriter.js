@@ -24,7 +24,7 @@ const { askClaude, askClaudeSonnet } = require('../../config/claude');
 const PAIN_POINTS = {
   low_score: (score) => `Your restaurant's online storefront scores ${score}/100 for design and visibility`,
   competitor: (name, area) => `${name} in ${area} has a professional site and is taking all the local searches`,
-  no_presence: `People in ${area} are searching for food, but they can't see your menu or space online`,
+  no_presence: (area) => `People in ${area} are searching for food, but they can't see your menu or space online`,
   outdated: `Your current site looks outdated and doesn't match the quality of your food`,
   no_website: `Customers can't find your menu, timings, or a professional photo of your food online`
 };
@@ -75,7 +75,7 @@ async function writeEmail(lead) {
   3. Explain that people in ${area} are searching for places like theirs but can't find a professional site/menu
   4. Offer to build them a professional website that matches the quality of their food
   5. Close with: "Can I send you a free concept design/audit for ${lead.business_name}?"
-  6. Sign off as: Nahid | Naisora | hello@naisora.com`;
+  6. Sign off as: Nahid | Naisora | hey@naisora.com`;
 
   const emailText = await askClaudeSonnet(prompt);
 

@@ -31,7 +31,7 @@ async function createClientFolderStructure(client) {
   await sendTelegramAlert(
     `📁 *Client Folder Created — ${client.business_name}*\n\n` +
     `Create this structure in Google Drive:\n\`\`\`${folderStructure}\`\`\`\n\n` +
-    `Share the main folder with: hello@naisora.com`
+    `Share the main folder with: hey@naisora.com`
   );
 
   return folderStructure;

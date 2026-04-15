@@ -8,7 +8,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const AGENCY_DETAILS = {
   name: 'Naisora',
   owner: 'Nahid Pasha',
-  email: 'hello@naisora.com',
+  email: 'hey@naisora.com',
   website: 'naisora.com',
   location: 'Bangalore, Karnataka, India'
 };
@@ -75,7 +75,7 @@ function generateCSV(invoices, summary) {
   const rows = [
     ['NAISORA — Financial Export'],
     ['Owner: Nahid Pasha'],
-    ['Email: hello@naisora.com'],
+    ['Email: hey@naisora.com'],
     ['Location: Bangalore, Karnataka, India'],
     [''],
     ['INVOICE DETAILS'],
@@ -149,7 +149,7 @@ function generateReport(invoices, summary, period) {
     ].join('')),
     ``,
     `Note: Add 18% GST to all amounts for tax filing.`,
-    `Business: Naisora | hello@naisora.com | naisora.com`
+    `Business: Naisora | hey@naisora.com | naisora.com`
   ];
 
   return lines.join('\n');

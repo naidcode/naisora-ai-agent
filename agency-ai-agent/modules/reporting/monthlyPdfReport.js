@@ -166,7 +166,7 @@ function generateReportHTML(data, summary) {
 </div>
 
 <div class="footer">
-  Prepared by <span class="brand">Naisora</span> · hello@naisora.com · naisora.com<br>
+  Prepared by <span class="brand">Naisora</span> · hey@naisora.com · naisora.com<br>
   Questions? Reply to this email or WhatsApp us anytime.
 </div>
 

@@ -62,10 +62,12 @@ function startAllJobs() {
   console.log('✅ 08:30 AM — Daily Priority Report');
 
   // 2. WHATSAPP OUTREACH — 10:00 AM
+  /*
   cron.schedule('0 10 * * *', safeJob('WhatsApp Outreach', async () => {
     await sendDailyWhatsApp();
   }));
   console.log('✅ 10:00 AM — WhatsApp Outreach (Cold)');
+  */
 
   // 3. EMAIL OUTREACH — 11:00 AM
   cron.schedule('0 11 * * *', safeJob('Email Outreach', async () => {
@@ -74,16 +76,20 @@ function startAllJobs() {
   console.log('✅ 11:00 AM — Email Outreach (Cold)');
 
   // 4. CHECK REPLIES — Every 3 hours
+  /*
   cron.schedule('0 */3 * * *', safeJob('Check Replies', async () => {
     await checkReplies();
   }));
   console.log('✅ Every 3h — Check WhatsApp Replies');
+  */
 
   // 5. FOLLOW-UP ENGINE — 2:00 PM
+  /*
   cron.schedule('0 14 * * *', safeJob('WhatsApp Follow-up', async () => {
     await sendFollowUp();
   }));
   console.log('✅ 02:00 PM — WhatsApp Follow-ups');
+  */
 
   // 6. SCRAPER & AUDIT — 4:00 PM (Find new leads for tomorrow)
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {
