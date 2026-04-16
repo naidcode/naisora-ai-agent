@@ -7,7 +7,7 @@
 
 const { sendEmail } = require('../../config/smtp');
 const { writeColdEmail } = require('./emailWriter');
-const { getNewLeads, updateLeadStatus, STATUS } = require('../../config/database');
+const { getNewLeads, updateLeadStatus, logOutreach, STATUS } = require('../../config/database');
 // Load .env directly — dotenv was adding hidden \r characters to keys
 const fs = require('fs');
 if (fs.existsSync('.env')) {
@@ -43,6 +43,10 @@ async function sendDailyColdEmails() {
   let failed = 0;
 
   for (const lead of leads) {
+    if (!lead.email) {
+      console.log(`⚠️  Skipping ${lead.business_name} (no email)`);
+      continue;
+    }
     try {
       console.log(`\n✍️  Writing email for: ${lead.business_name}...`);
       
@@ -59,6 +63,11 @@ async function sendDailyColdEmails() {
         // Step 3: Update status in database
         await updateLeadStatus(lead.id, STATUS.CONTACTED, {
           email_subject: email.subject,
+        });
+        
+        // Step 4: Log to outreach_log
+        await logOutreach(lead.id, 'email', 'cold', email.body, {
+          subject: email.subject
         });
         
         sent++;
@@ -120,6 +129,9 @@ async function sendFollowupEmails1() {
       
       if (result.success) {
         await updateLeadStatus(lead.id, STATUS.FOLLOWUP_1);
+        await logOutreach(lead.id, 'email', 'followup_1', email.body, {
+          subject: email.subject
+        });
         console.log(`✅ Follow-up 1 sent to ${lead.business_name}`);
       }
       
@@ -154,6 +166,9 @@ async function sendFollowupEmails2() {
       
       if (result.success) {
         await updateLeadStatus(lead.id, STATUS.FOLLOWUP_2);
+        await logOutreach(lead.id, 'email', 'followup_2', email.body, {
+          subject: email.subject
+        });
         console.log(`✅ Final follow-up sent to ${lead.business_name}`);
       }
       
@@ -215,6 +230,13 @@ function randomDelay(minSeconds, maxSeconds) {
 // Sleep for milliseconds
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+if (require.main === module) {
+  sendDailyColdEmails().catch(err => {
+    console.error('❌ Fatal error in email sender:', err.message);
+    process.exit(1);
+  });
 }
 
 module.exports = {

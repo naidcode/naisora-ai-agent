@@ -81,6 +81,7 @@ async function getNewLeads(limit = 50) {
     .from('leads')
     .select('*')
     .eq('outreach_status', STATUS.NEW)
+    .not('email', 'is', null)
     .limit(limit)
     .order('created_at', { ascending: true });
 
@@ -141,6 +142,26 @@ async function markAsInterested(leadId, replyContent) {
     interested_at: new Date().toISOString(),
   });
   console.log(`🔥 HOT LEAD detected! Lead ID: ${leadId}`);
+}
+
+// --- Log an outreach attempt (email, whatsapp, etc.) ---
+async function logOutreach(leadId, channel, messageType, messageText, extraData = {}) {
+  const { error } = await supabase
+    .from('outreach_log')
+    .insert([{
+      lead_id: leadId,
+      channel: channel,
+      message_type: messageType,
+      message_text: messageText,
+      sent_at: new Date().toISOString(),
+      ...extraData
+    }]);
+
+  if (error) {
+    console.error(`❌ Failed to log outreach for ${leadId}:`, error.message);
+  } else {
+    console.log(`📝 Outreach logged for ${leadId} (${channel})`);
+  }
 }
 
 // --- Get weekly report numbers ---
@@ -206,6 +227,7 @@ module.exports = {
   getLeadsForFollowup2,
   updateLeadStatus,
   markAsInterested,
+  logOutreach,
   getWeeklyStats,
   testConnection,
 };
