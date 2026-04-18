@@ -10,6 +10,8 @@ const { sendDailyWhatsApp } = require('../modules/outreach/whatsappSender');
 const { runFollowUpEngine } = require('../modules/outreach/followUpEngine');
 const { checkReplies } = require('../modules/outreach/replyReader');
 const { runFullScrape } = require('../modules/scraper/googleMapsScraper');
+const { scrapeEmailsForLeads } = require('../modules/scraper/emailScraper');
+const { sendDailyColdEmails, sendFollowupEmails1, sendFollowupEmails2 } = require('../modules/email/emailSender');
 const { runOptimizationCycle } = require('../brain/optimizationEngine');
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -30,6 +32,9 @@ async function replenishLeads() {
       searchTypes: ['restaurants', 'cafes'],
       maxPerSearch: 25,
     });
+    
+    console.log('📧 Scraping emails for newly found leads...');
+    await scrapeEmailsForLeads(30);
   } else {
     console.log(`\n✅ Pipeline healthy — ${count} uncontacted leads available`);
   }
@@ -95,18 +100,21 @@ async function startAutoPilot() {
       const topLeads = await selectBestLeads(50);
       console.log(`   Selected ${topLeads.length} high-value leads`);
 
-      // ── Step 3: Send outreach to top leads ──
-      console.log('\n📱 Step 3: Sending outreach...');
+      // ── Step 3: Send outreach (WhatsApp + Email) ──
+      console.log('\n📱 Step 3: Sending outreach (WhatsApp + Email)...');
       await sendDailyWhatsApp();
-      stats.sent = topLeads.length;
+      await sendDailyColdEmails();
+      stats.sent = topLeads.length; 
 
       // ── Step 4: Check & process replies ──
       console.log('\n📬 Step 4: Checking replies...');
       await checkReplies();
 
-      // ── Step 5: Send follow-ups (Day 2, 4, 7) ──
-      console.log('\n🔄 Step 5: Sending follow-ups...');
+      // ── Step 5: Send follow-ups (WhatsApp + Email) ──
+      console.log('\n🔄 Step 5: Sending follow-ups (WhatsApp + Email)...');
       const followUpResult = await runFollowUpEngine();
+      await sendFollowupEmails1();
+      await sendFollowupEmails2();
       stats.followUpsSent = followUpResult.sent || 0;
 
       // ── Step 6: Daily Telegram report ──

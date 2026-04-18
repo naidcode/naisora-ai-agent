@@ -1,6 +1,20 @@
+// modules/content/blogScheduler.js
+// ═══════════════════════════════════════════════════════════════════════════════
+// Naisora AI Growth OS — Blog Scheduling Engine
+// Now uses the permanent client-attracting topic bank from blogStrategy.js
+// 80% client-generating posts, 20% authority-building posts
+// ═══════════════════════════════════════════════════════════════════════════════
+
 const { createClient } = require('@supabase/supabase-js');
 const { sendTelegram } = require('../../config/telegram');
 const { writeBlog } = require('./blogWriter');
+const {
+  CLIENT_TOPICS,
+  AUTHORITY_TOPICS,
+  getContentType,
+  pickLocalKeywords,
+  SEO_STRATEGY,
+} = require('../../brain/blogStrategy');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -11,26 +25,44 @@ const BLOG_SCHEDULE = {
   premium: 8     // Full service clients
 };
 
-// Blog topics rotation — auto-generates fresh topics each month
-const TOPIC_TEMPLATES = [
-  'Best {cuisine} restaurants in {area} — {year} guide',
-  'Why {restaurantName} is {area}\'s hidden gem',
-  'Top dishes to try at {restaurantName}',
-  '{restaurantName} — everything you need to know before visiting',
-  'The story behind {restaurantName}\'s signature {dish}',
-  'Weekend lunch spots in {area} — why {restaurantName} tops the list',
-  '{restaurantName} review — honest food lover\'s take',
-  'How to book {restaurantName} for your next family dinner'
-];
+// ═══════════════════════════════════════════════════════════════════════════════
+// Topic Selection — picks from the client-attracting topic bank
+// ═══════════════════════════════════════════════════════════════════════════════
 
-function generateTopicForClient(client, monthIndex = 0) {
-  const template = TOPIC_TEMPLATES[monthIndex % TOPIC_TEMPLATES.length];
-  return template
-    .replace('{restaurantName}', client.name)
-    .replace('{cuisine}', client.cuisine || 'Indian')
-    .replace('{area}', client.area || 'Bangalore')
-    .replace('{year}', new Date().getFullYear())
-    .replace('{dish}', client.signature_dish || 'biryani');
+/**
+ * Generate a topic for a client.
+ * - 80% of topics come from CLIENT_TOPICS (pain-point, conversion-focused)
+ * - 20% come from AUTHORITY_TOPICS (trust-building)
+ *
+ * Topics are personalized with the client's restaurant name and area.
+ */
+function generateTopicForClient(client, postNumber = 0) {
+  const contentType = getContentType(postNumber);
+  const pool = contentType === 'authority' ? AUTHORITY_TOPICS : CLIENT_TOPICS;
+
+  let topic = pool[postNumber % pool.length];
+
+  // Personalize with client details if applicable
+  if (client.area && topic.includes('Bangalore')) {
+    // Occasionally swap "Bangalore" with the client's specific area for hyper-local content
+    if (postNumber % 3 === 0) {
+      topic = topic.replace('Bangalore', client.area);
+    }
+  }
+
+  return { topic, contentType };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Naisora's OWN blog topics — for the agency website blog
+// These attract NEW restaurant owners as clients
+// ═══════════════════════════════════════════════════════════════════════════════
+function generateNaisoraBlogTopic(postNumber = 0) {
+  const contentType = getContentType(postNumber);
+  const pool = contentType === 'authority' ? AUTHORITY_TOPICS : CLIENT_TOPICS;
+  const topic = pool[postNumber % pool.length];
+
+  return { topic, contentType };
 }
 
 async function getActiveClients() {
@@ -74,35 +106,51 @@ async function getPublishedThisMonth(clientId) {
   return count || 0;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Get the total number of blogs ever written (for topic rotation)
+// ═══════════════════════════════════════════════════════════════════════════════
+async function getTotalBlogCount(clientId = null) {
+  let query = supabase.from('blog_posts').select('*', { count: 'exact' });
+  if (clientId) query = query.eq('client_id', clientId);
+
+  const { count, error } = await query;
+  if (error) return 0;
+  return count || 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Schedule blogs for a specific client
+// ═══════════════════════════════════════════════════════════════════════════════
 async function scheduleBlogsForClient(client) {
   const plan = client.plan || 'starter';
   const blogsPerMonth = BLOG_SCHEDULE[plan] || 2;
 
   const publishedThisMonth = await getPublishedThisMonth(client.id);
   const pendingCount = await getPendingBlogCount(client.id);
+  const totalEverWritten = await getTotalBlogCount(client.id);
 
   const totalCovered = publishedThisMonth + pendingCount;
   const blogsNeeded = Math.max(0, blogsPerMonth - totalCovered);
 
   if (blogsNeeded === 0) {
-    console.log(`@${client.name} — blog quota met for this month (${publishedThisMonth} published, ${pendingCount} pending)`);
+    console.log(`✅ ${client.name} — blog quota met (${publishedThisMonth} published, ${pendingCount} pending)`);
     return 0;
   }
 
-  console.log(`${client.name} — needs ${blogsNeeded} more blog(s) this month`);
+  console.log(`📝 ${client.name} — needs ${blogsNeeded} more blog(s) this month`);
 
   let written = 0;
   for (let i = 0; i < blogsNeeded; i++) {
-    const topicIndex = (publishedThisMonth + pendingCount + i) % TOPIC_TEMPLATES.length;
-    const topic = generateTopicForClient(client, topicIndex);
+    const postNumber = totalEverWritten + i;
+    const { topic, contentType } = generateTopicForClient(client, postNumber);
 
-    const blogType = i % 2 === 0 ? 'local_seo' : 'listicle';
+    console.log(`   → Writing ${contentType} blog: "${topic}"`);
 
     const blog = await writeBlog({
       clientId: client.id,
       restaurantName: client.name,
       topic: topic,
-      blogType: blogType,
+      blogType: contentType,
       area: client.area || 'Bangalore',
       cuisine: client.cuisine || 'Indian',
       keywords: client.target_keywords || []
@@ -122,6 +170,9 @@ async function scheduleBlogsForClient(client) {
   return written;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Publish approved & scheduled blogs
+// ═══════════════════════════════════════════════════════════════════════════════
 async function publishScheduledBlogs() {
   const now = new Date().toISOString();
 
@@ -169,8 +220,12 @@ async function publishScheduledBlogs() {
   return published;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Main entry point
+// ═══════════════════════════════════════════════════════════════════════════════
 async function run(mode = 'schedule') {
-  console.log(`📅 Blog scheduler running — mode: ${mode}`);
+  console.log(`\n📅 Blog scheduler running — mode: ${mode}`);
+  console.log(`   Strategy: 80% client-generating | 20% authority-building`);
 
   try {
     if (mode === 'publish') {
@@ -197,7 +252,8 @@ async function run(mode = 'schedule') {
     if (totalWritten > 0) {
       await sendTelegram(
         `📝 *Blog Scheduler Complete*\n\n` +
-        `Generated ${totalWritten} new blog draft(s)\n` +
+        `Generated ${totalWritten} new client-attracting blog draft(s)\n` +
+        `Strategy: Problem → Solution → Conversion\n` +
         `Status: Scheduled — auto-publishes when approved\n` +
         `Review in Supabase → blog_posts table`
       );
@@ -211,4 +267,4 @@ async function run(mode = 'schedule') {
   }
 }
 
-module.exports = { run, scheduleBlogsForClient, publishScheduledBlogs };
+module.exports = { run, scheduleBlogsForClient, publishScheduledBlogs, generateNaisoraBlogTopic };

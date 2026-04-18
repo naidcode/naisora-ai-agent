@@ -19,6 +19,7 @@ const { sendMessage } = require('../config/telegram');
 
 // ─── Modules ──────────────────────────────────────────────────────────────────
 const { sendDailyColdEmails, sendFollowupEmails1, sendFollowupEmails2 } = require('../modules/email/emailSender');
+const { scrapeEmailsForLeads } = require('../modules/scraper/emailScraper');
 const { runFullScrape } = require('../modules/scraper/googleMapsScraper');
 const { processLeads } = require('../modules/scraper/leadProcessor');
 const { sendDailyWhatsApp, sendFollowUp } = require('../modules/outreach/whatsappSender');
@@ -70,8 +71,10 @@ function startAllJobs() {
   // 3. EMAIL OUTREACH — 11:00 AM
   cron.schedule('0 11 * * *', safeJob('Email Outreach', async () => {
     await sendDailyColdEmails();
+    await sendFollowupEmails1();
+    await sendFollowupEmails2();
   }));
-  console.log('✅ 11:00 AM — Email Outreach (Cold)');
+  console.log('✅ 11:00 AM — Email Outreach (Cold + Follow-ups)');
 
   // 4. CHECK REPLIES — Every 3 hours
   cron.schedule('0 */3 * * *', safeJob('Check Replies', async () => {
@@ -89,17 +92,21 @@ function startAllJobs() {
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {
     console.log('🔍 Scraping new leads...');
     const rawLeads = await runFullScrape({
-      areas: ['Koramangala', 'Indiranagar', 'HSR Layout'],
+      areas: ['Koramangala', 'Indiranagar', 'HSR Layout', 'Whitefield', 'Jayanagar'],
       searchTypes: ['restaurants', 'cafes'],
       maxPerSearch: 20
     });
     const processed = await processLeads(rawLeads, false);
     console.log(`✅ Processed ${processed.hot_leads.length} hot leads.`);
     
+    // Scrape emails for these and others
+    console.log('📧 Scraping emails for leads with websites...');
+    await scrapeEmailsForLeads(30);
+
     // Audit a few
     await auditWarmLeads(10);
   }));
-  console.log('✅ 04:00 PM — Scraper & SEO Audit');
+  console.log('✅ 04:00 PM — Scraper, Email Scraper & SEO Audit');
 
   // 7. WEEKLY PIPELINE SUMMARY — Sunday 8 PM
   cron.schedule('0 20 * * 0', safeJob('Weekly Pipeline Summary', async () => {
