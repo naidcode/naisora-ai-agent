@@ -9,10 +9,9 @@ const fs = require('fs');
 if (fs.existsSync('.env')) {
   const envContent = fs.readFileSync('.env', 'utf8');
   envContent.split('\n').forEach(line => {
-    const cleaned = line.replace(/\r/g, '').trim();
-    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
-      const [key, ...rest] = cleaned.split('=');
-      process.env[key.trim()] = rest.join('=').trim();
+    const [key, ...rest] = line.split('=');
+    if (key && rest.length && !key.trim().startsWith('#')) {
+      process.env[key.trim()] = rest.join('=').replace(/\r/g, '').trim();
     }
   });
 }
@@ -52,7 +51,7 @@ const { getRestaurantHashtags } = require("./modules/social/hashtagResearcher");
 const { startAutoPilot } = require("./system/autoPilot");
 const { selectBestLeads } = require("./brain/leadSelector");
 const { runFollowUpEngine } = require("./modules/outreach/followUpEngine");
-const { isStopped, stopAgent, startAgent } = require("./system/masterSwitch");
+const { isStopped, stopAgent, startAgent: resumeAgent } = require("./system/masterSwitch");
 
 // ─── Detect if running on Railway (no interactive menu on server) ─────────────
 const IS_RAILWAY =
@@ -247,7 +246,7 @@ async function showMenu() {
 
           case "99": {
             if (isStopped()) {
-              startAgent();
+              resumeAgent();
             } else {
               stopAgent();
             }
