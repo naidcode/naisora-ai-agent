@@ -1,4 +1,9 @@
-const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_API_URL || process.env.AGENT_API_URL || ''
+const AGENT_URL = process.env.NEXT_PUBLIC_AGENT_API_URL || process.env.AGENT_API_URL
+
+if (!AGENT_URL) {
+  console.warn('WARNING: NEXT_PUBLIC_AGENT_API_URL is missing. Agent communication will fail.')
+}
+
 const AGENT_SECRET = process.env.NEXT_PUBLIC_AGENT_API_SECRET || process.env.AGENT_API_SECRET || 'naisora_secret_2026'
 
 const headers = {
@@ -7,13 +12,16 @@ const headers = {
 }
 
 export async function getAgentStatus() {
+  if (!AGENT_URL) return { status: 'offline' }
   try {
     const res = await fetch(`${AGENT_URL}/status`, { 
       headers,
       cache: 'no-store'
     })
+    if (!res.ok) throw new Error('Agent unreachable')
     return await res.json()
-  } catch {
+  } catch (err) {
+    console.error('Agent Status Error:', err)
     return { status: 'offline' }
   }
 }
