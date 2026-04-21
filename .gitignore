@@ -1,12 +1,31 @@
-# Environment variables — never upload to GitHub
-.env
-
-# Session data — contains login cookies
-data/
-
-# Node modules — too large for GitHub
+# Development
 node_modules/
+.next/
+.next.zip
+out/
+build/
+dist/
 
-# Lock files (optional)
-package-lock.json
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project specific
+data/
 test.js
+package-lock.json
