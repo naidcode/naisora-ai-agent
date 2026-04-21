@@ -15,7 +15,7 @@ if (fs.existsSync('.env')) {
   });
 }
 
-require('./api') // start API alongside agent
+
 const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testEmail } = require("./config/smtp");
@@ -385,7 +385,12 @@ async function startAgent() {
     );
     console.log("📱 You will receive Telegram alerts for all activity.\n");
     // Keep process alive on Railway
-    setInterval(() => {}, 1000 * 60 * 60); // heartbeat every hour
+    // Keep alive + start HTTP
+const express = require('express')
+const app = express()
+app.get('/status', (req, res) => res.json({ status: 'running', uptime: process.uptime() }))
+app.get('/ping', (req, res) => res.send('ok'))
+app.listen(process.env.PORT || 3000, '0.0.0.0')
   } else {
     // Local: show interactive menu
     console.log("💻 Local mode — showing interactive menu...\n");
