@@ -3,7 +3,6 @@
 // Naisora AI Agent v2.0
 // Command: node index.js
 // ============================================
-require('./api') // start API alongside agent
 // Load .env directly — dotenv was adding hidden \r characters to keys
 const fs = require('fs');
 if (fs.existsSync('.env')) {
@@ -16,6 +15,7 @@ if (fs.existsSync('.env')) {
   });
 }
 
+require('./api') // start API alongside agent
 const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testEmail } = require("./config/smtp");
