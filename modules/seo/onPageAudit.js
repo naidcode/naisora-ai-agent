@@ -14,7 +14,7 @@ async function runOnPageAudit(url) {
 
   try {
     await page.goto(url.startsWith('http') ? url : `https://${url}`, {
-      waitUntil: 'domcontentloaded', timeout: 20000
+      waitUntil: 'domcontentloaded', timeout: 60000
     });
 
     const data = await page.evaluate(() => {

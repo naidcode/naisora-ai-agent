@@ -51,7 +51,7 @@ async function crawlOnPageSeo(url) {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
     const result = await page.evaluate(() => {
       const title = document.title || '';

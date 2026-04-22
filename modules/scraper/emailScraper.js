@@ -86,12 +86,12 @@ async function extractEmailsFromPage(page, url) {
   try {
     // ── Robust Navigation with Retries ──
     try {
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
     } catch (e) {
       try {
-        await page.goto(url, { waitUntil: 'load', timeout: 30000 });
+        await page.goto(url, { waitUntil: 'load', timeout: 60000 });
       } catch (e2) {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       }
     }
     await randomDelay(1000, 2500);

@@ -16,7 +16,7 @@ const { humanizeForChannel } = require('./humanizer');
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
 const DAILY_LIMIT = 20;
-const SESSION_FILE = path.join(__dirname, '../../data/instagram_session.json');
+const SESSION_FILE = path.join(__dirname, '../../data/ig_session.json');
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
 const randomDelay = (min, max) => delay(Math.floor(Math.random() * (max - min) + min));
 
@@ -59,32 +59,36 @@ async function loginInstagram(page) {
   // Try session first
   const savedCookies = loadSession();
   if (savedCookies) {
+    console.log('   📂 Loading Instagram session cookies...');
     await page.setCookie(...savedCookies);
-    await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle2' });
-    await randomDelay(2000, 4000);
+    await page.goto('https://www.instagram.com/', { waitUntil: 'networkidle2', timeout: 60000 });
+    await randomDelay(3000, 5000);
 
-    // Check if still logged in
-    const isLoggedIn = await page.$('svg[aria-label="Home"]');
+    const isLoggedIn = await page.$('svg[aria-label="Home"]') || await page.$('svg[aria-label="New post"]');
     if (isLoggedIn) {
       console.log('   ✅ Instagram session restored');
       return true;
+    } else {
+      console.log('   ⚠️ Instagram session expired, clearing file...');
+      if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
     }
   }
 
   // Fresh login
   console.log('   🔑 Logging into Instagram...');
-  await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle2' });
+  await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'networkidle2', timeout: 60000 });
   await randomDelay(2000, 3000);
 
+  await page.waitForSelector('input[name="username"]', { timeout: 10000 });
   await page.type('input[name="username"]', process.env.INSTAGRAM_USERNAME, { delay: 80 });
   await randomDelay(500, 1000);
   await page.type('input[name="password"]', process.env.INSTAGRAM_PASSWORD, { delay: 80 });
   await randomDelay(500, 1000);
   await page.click('button[type="submit"]');
-  await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 });
+  await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
   await randomDelay(3000, 5000);
 
-  // Save session
+  // Save session if login looks successful
   const cookies = await page.cookies();
   saveSession(cookies);
   console.log('   ✅ Logged in, session saved');
