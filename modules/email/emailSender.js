@@ -57,26 +57,20 @@ async function sendDailyColdEmails() {
       console.log(`📤 Sending to: ${lead.email}...`);
       
       // Step 2: Send the email via Gmail API
-      const result = await sendEmail(lead.email, email.subject, email.body);
+      await sendEmail(lead.email, email.subject, email.body);
       
-      if (result.success) {
-        // Step 3: Update status in database
-        await updateLeadStatus(lead.id, STATUS.CONTACTED, {
-          email_subject: email.subject,
-        });
-        
-        // Step 4: Log to outreach_log
-        await logOutreach(lead.id, 'email', 'cold', email.body, {
-          subject: email.subject
-        });
-        
-        sent++;
-        console.log(`✅ Sent! (${sent}/${leads.length})`);
-        
-      } else {
-        failed++;
-        console.log(`❌ Failed to send to ${lead.email}`);
-      }
+      // Step 3: Update status in database
+      await updateLeadStatus(lead.id, STATUS.CONTACTED, {
+        email_subject: email.subject,
+      });
+      
+      // Step 4: Log to outreach_log
+      await logOutreach(lead.id, 'email', 'cold', email.body, {
+        subject: email.subject
+      });
+      
+      sent++;
+      console.log(`✅ Sent! (${sent}/${leads.length})`);
 
       // Wait 2-5 minutes between emails
       // This makes it look human — not automated
@@ -125,15 +119,13 @@ async function sendFollowupEmails1() {
   for (const lead of leads) {
     try {
       const email = await writeFollowup1(lead);
-      const result = await sendEmail(lead.email, email.subject, email.body);
+      await sendEmail(lead.email, email.subject, email.body);
       
-      if (result.success) {
-        await updateLeadStatus(lead.id, STATUS.FOLLOWUP_1);
-        await logOutreach(lead.id, 'email', 'followup_1', email.body, {
-          subject: email.subject
-        });
-        console.log(`✅ Follow-up 1 sent to ${lead.business_name}`);
-      }
+      await updateLeadStatus(lead.id, STATUS.FOLLOWUP_1);
+      await logOutreach(lead.id, 'email', 'followup_1', email.body, {
+        subject: email.subject
+      });
+      console.log(`✅ Follow-up 1 sent to ${lead.business_name}`);
       
       await sleep(randomDelay(3, 7) * 1000);
       
@@ -162,15 +154,13 @@ async function sendFollowupEmails2() {
   for (const lead of leads) {
     try {
       const email = await writeFollowup2(lead);
-      const result = await sendEmail(lead.email, email.subject, email.body);
+      await sendEmail(lead.email, email.subject, email.body);
       
-      if (result.success) {
-        await updateLeadStatus(lead.id, STATUS.FOLLOWUP_2);
-        await logOutreach(lead.id, 'email', 'followup_2', email.body, {
-          subject: email.subject
-        });
-        console.log(`✅ Final follow-up sent to ${lead.business_name}`);
-      }
+      await updateLeadStatus(lead.id, STATUS.FOLLOWUP_2);
+      await logOutreach(lead.id, 'email', 'followup_2', email.body, {
+        subject: email.subject
+      });
+      console.log(`✅ Final follow-up sent to ${lead.business_name}`);
       
       await sleep(randomDelay(3, 7) * 1000);
       
@@ -208,14 +198,10 @@ async function testSend() {
   console.log('─'.repeat(50));
   
   console.log('\n📤 Sending to your own email...');
-  const result = await sendEmail(testLead.email, '[TEST] ' + email.subject, email.body);
+  await sendEmail(testLead.email, '[TEST] ' + email.subject, email.body);
   
-  if (result.success) {
-    console.log('\n🎉 SUCCESS! Check your inbox for the test email.');
-    console.log('If it looks good, your email system is ready!');
-  } else {
-    console.log('\n❌ Send failed. Check your Gmail API credentials in .env');
-  }
+  console.log('\n🎉 SUCCESS! Check your inbox for the test email.');
+  console.log('If it looks good, your email system is ready!');
 }
 
 async function sendScraperFollowUpEmail(lead) {
@@ -226,16 +212,14 @@ async function sendScraperFollowUpEmail(lead) {
     const email = await writeScraperFollowUpEmail(lead);
     
     console.log(`📧 Subject: ${email.subject}`);
-    const result = await sendEmail(lead.email, email.subject, email.body);
+    await sendEmail(lead.email, email.subject, email.body);
     
-    if (result.success) {
-      await updateLeadStatus(lead.id, 'follow_up_sent');
-      await logOutreach(lead.id, 'email', 'auto_followup', email.body, {
-        subject: email.subject
-      });
-      console.log(`✅ Auto follow-up sent!`);
-      return true;
-    }
+    await updateLeadStatus(lead.id, 'follow_up_sent');
+    await logOutreach(lead.id, 'email', 'auto_followup', email.body, {
+      subject: email.subject
+    });
+    console.log(`✅ Auto follow-up sent!`);
+    return true;
   } catch (error) {
     console.error(`❌ Auto follow-up failed for ${lead.email}:`, error.message);
   }

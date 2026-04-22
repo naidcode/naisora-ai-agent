@@ -419,7 +419,7 @@ async function startAgent() {
   try {
     results.email = await testEmail();
   } catch (e) {
-    console.error("❌ Email failed — check SMTP settings in .env");
+    console.error("❌ Email failed — check RESEND_API_KEY in .env");
   }
 
   try {
@@ -440,7 +440,7 @@ async function startAgent() {
     `  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📧 Email:        ${results.email ? "✅ Connected" : "❌ Failed"}`,
+    `  📧 Email:        ${results.email ? "✅ Resend Ready" : "❌ Resend Failed"}`,
   );
   console.log(
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,

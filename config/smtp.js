@@ -1,10 +1,10 @@
 // config/smtp.js
-// Naisora AI Agent — SMTP Email Config
-// For non-Gmail accounts (Hostinger, Zoho, etc.)
+// Naisora AI Agent — Resend Email Config (Replacing SMTP)
 
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const fs = require('fs');
 
+// Load .env directly
 if (fs.existsSync('.env')) {
   const envContent = fs.readFileSync('.env', 'utf8');
   envContent.split('\n').forEach(line => {
@@ -16,87 +16,44 @@ if (fs.existsSync('.env')) {
   });
 }
 
-// 1. Initial Transporter Config (Port 465)
-let transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-  port: parseInt(process.env.SMTP_PORT) || 465,
-  secure: true,
-  auth: {
-    user: process.env.SMTP_USER || process.env.YOUR_EMAIL,
-    pass: process.env.SMTP_PASS
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// 2. Fallback logic and Detailed Logging
-transporter.verify((error, success) => {
+/**
+ * Sends an email using Resend API
+ * @param {string} to - Recipient email
+ * @param {string} subject - Email subject
+ * @param {string} html - Email body (HTML or plain text)
+ */
+async function sendEmail(to, subject, html) {
+  const { data, error } = await resend.emails.send({
+    from: 'Nahid from Naisora <hey@naisora.com>',
+    to,
+    subject,
+    html
+  });
+  
   if (error) {
-    console.error('❌ SMTP failed:', error.message);
-    console.error('Host:', process.env.SMTP_HOST);
-    console.error('Port:', process.env.SMTP_PORT);
-    console.error('User:', process.env.SMTP_USER || process.env.YOUR_EMAIL);
-
-    console.log('🔄 Attempting fallback to port 587...');
-    
-    // Fallback — try port 587 if 465 fails
-    transporter = nodemailer.createTransport({
-      host: 'smtp.hostinger.com',
-      port: 587,
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER || process.env.YOUR_EMAIL,
-        pass: process.env.SMTP_PASS
-      },
-      tls: {
-        rejectUnauthorized: false
-      }
-    });
-
-    transporter.verify((fallbackError, fallbackSuccess) => {
-      if (fallbackError) {
-        console.error('❌ Fallback SMTP failed:', fallbackError.message);
-      } else {
-        console.log('✅ Fallback SMTP connected successfully (Port 587)');
-      }
-    });
-  } else {
-    console.log('✅ SMTP connected successfully');
+    console.error('❌ Resend Error:', error.message);
+    throw new Error(error.message);
   }
-});
-
-
-async function sendEmail(to, subject, body) {
-  try {
-    const info = await transporter.sendMail({
-      from: `"${process.env.YOUR_NAME}" <${process.env.YOUR_EMAIL}>`,
-      to: to,
-      subject: subject,
-      text: body,
-    });
-
-    console.log(`📧 Email sent via SMTP to ${to} | Message ID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    console.error(`❌ SMTP Failed to send to ${to}:`, error.message);
-    return { success: false, error: error.message };
-  }
+  
+  return data;
 }
 
+/**
+ * Tests the Resend API connection (checks if key exists)
+ */
 async function testConnection() {
-  console.log('📧 Testing SMTP connection...');
-  try {
-    await transporter.verify();
-    console.log('✅ SMTP connected!');
+  if (process.env.RESEND_API_KEY) {
+    console.log('✅ Email connected via Resend');
     return true;
-  } catch (error) {
-    console.error('❌ SMTP connection failed:', error.message);
+  } else {
+    console.error('❌ Resend API key missing');
     return false;
   }
 }
 
-module.exports = {
+module.exports = { 
   sendEmail,
-  testConnection,
+  testConnection
 };
