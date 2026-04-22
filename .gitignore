@@ -26,6 +26,5 @@ yarn-error.log*
 Thumbs.db
 
 # Project specific
-data/
 test.js
 package-lock.json
