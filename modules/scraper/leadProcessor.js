@@ -152,7 +152,6 @@ function processLead(raw) {
   const processed = {
     // Identity
     business_name: raw.name.trim(),
-    place_id: raw.place_id || null,
     area: raw.area,
     category: raw.category || "restaurant",
     address: raw.address || null,
@@ -207,20 +206,18 @@ async function saveleadsToSupabase(processedLeads) {
       .select("id");
 
     if (error) {
-      // Handle duplicate key error gracefully (deduplicator handles this too)
-      if (error.code === "23505") {
-        console.log(
-          `  ℹ️  ${batch.length} leads already exist — skipping duplicates`,
-        );
-      } else {
-        console.error(`  ❌ Supabase insert error: ${error.message}`);
-        saveErrors.push(error.message);
-      }
+      console.error(`  ❌ Supabase insert error!`);
+      console.error(`     Error Message: ${error.message}`);
+      console.error(`     Error Code:    ${error.code}`);
+      console.error(`     Error Details: ${error.details}`);
+      console.error(`     Full Error Object:`, JSON.stringify(error, null, 2));
+      saveErrors.push(error.message);
     } else {
-      savedCount += data?.length || batch.length;
+      savedCount += data?.length || 0;
     }
   }
 
+  console.log(`✅ Saved [${savedCount}] leads to DB`);
   return { saved: savedCount, errors: saveErrors };
 }
 
@@ -280,7 +277,6 @@ async function processLeads(rawLeads, saveToDb = true) {
   if (saveToDb && processed.length > 0) {
     console.log(`\n💾 Saving ${processed.length} leads to Supabase...`);
     saveResult = await saveleadsToSupabase(processed);
-    console.log(`   ✅ Saved: ${saveResult.saved}`);
     if (saveResult.errors.length > 0) {
       console.log(`   ⚠️  Errors: ${saveResult.errors.join(", ")}`);
     }

@@ -133,9 +133,6 @@ async function scrapeEmailFromWebsite(page, websiteUrl) {
     const emails = await extractEmailsFromPage(page, pageUrl);
     allEmails.push(...emails);
 
-    // If we found good emails on homepage, stop checking other pages
-    if (allEmails.length > 0 && pageUrl === url) break;
-
     await randomDelay(500, 1500);
   }
 
@@ -225,10 +222,10 @@ async function scrapeEmailsForLeads(limit = 50) {
           .update({ email })
           .eq('id', lead.id);
 
-        console.log(`   ✅ Email found: ${email}`);
+        console.log(`✅ Email found: ${email}`);
         found++;
       } else {
-        console.log('   ❌ No email found');
+        console.log(`⚠️ No email found for ${lead.website}`);
         notFound++;
       }
 
