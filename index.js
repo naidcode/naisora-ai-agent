@@ -123,9 +123,9 @@ async function showMenu() {
               searchTypes: ["restaurants", "cafes"],
               maxPerSearch: 15,
             });
-            const processed = await processLeads(rawLeads, false);
-            const allLeads = [...processed.hot_leads, ...processed.warm_leads];
-            await deduplicateLeads(allLeads);
+            const { getReadyLeads } = require("./modules/scraper/leadDeduplicator");
+            const result = await getReadyLeads(rawLeads);
+            console.log(`\n✅ Session Complete: ${result.newLeads.length} new, ${result.followUpLeads.length} follow-ups.`);
             break;
           }
 

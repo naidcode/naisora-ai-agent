@@ -23,7 +23,7 @@
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.8",
     "open": "^10.1.0",
-    "puppeteer": "^24.40.0",
+    "puppeteer": "^24.42.0",
     "twilio": "^5.13.1"
   }
 }

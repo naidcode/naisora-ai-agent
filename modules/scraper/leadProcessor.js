@@ -107,7 +107,7 @@ function scoreLead(lead) {
     reasons.push("Cafe focus");
   }
 
-  return { score, reasons };
+  return score;
 }
 
 // ─── Categorise based on score ────────────────────────────────────────────────
@@ -146,12 +146,13 @@ function processLead(raw) {
   const normalisedPhone = normalisePhone(raw.phone);
 
   // Score
-  const { score, reasons } = scoreLead({ ...raw, phone: normalisedPhone });
+  const score = scoreLead({ ...raw, phone: normalisedPhone });
 
   // Build processed lead object
   const processed = {
     // Identity
     business_name: raw.name.trim(),
+    place_id: raw.place_id || null,
     area: raw.area,
     category: raw.category || "restaurant",
     address: raw.address || null,
@@ -170,7 +171,7 @@ function processLead(raw) {
     // Scoring
     lead_score: score,
     lead_category: categorizeLead(score),
-    score_reasons: reasons,
+    score_reasons: [],
 
     // Pipeline status
     outreach_status: "new", // new → contacted → replied → closed → lost

@@ -6,7 +6,10 @@ const puppeteer = require('puppeteer');
 const { route } = require('../../config/llmRouter');
 
 async function runOnPageAudit(url) {
-  const browser = await puppeteer.launch({ headless: 'new', args: ['--no-sandbox'] });
+  const browser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
   const page = await browser.newPage();
 
   try {

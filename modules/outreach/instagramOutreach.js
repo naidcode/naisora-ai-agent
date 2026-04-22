@@ -49,13 +49,8 @@ function loadSession() {
 // ─── Launch browser ───────────────────────────────────────────────────────────
 async function launchBrowser() {
   return await puppeteer.launch({
-    headless: true, // Instagram needs real browser to avoid detection, but true needed if no X server
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--window-size=1280,800',
-    ],
-    defaultViewport: { width: 1280, height: 800 },
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 }
 
@@ -296,4 +291,4 @@ async function runInstagramOutreach(searchTerms = ['restaurant Bangalore', 'cafe
   );
 }
 
-module.exports = { runInstagramOutreach };
+module.exports = { runInstagramOutreach, loginInstagram };

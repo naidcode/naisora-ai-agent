@@ -96,8 +96,11 @@ function startAllJobs() {
       searchTypes: ['restaurants', 'cafes'],
       maxPerSearch: 20
     });
-    const processed = await processLeads(rawLeads, false);
-    console.log(`✅ Processed ${processed.hot_leads.length} hot leads.`);
+    
+    const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');
+    const dedupResult = await getReadyLeads(rawLeads);
+    
+    console.log(`✅ Scraper session done. New: ${dedupResult.newLeads.length}, Follow-ups: ${dedupResult.followUpLeads.length}`);
     
     // Scrape emails for these and others
     console.log('📧 Scraping emails for leads with websites...');

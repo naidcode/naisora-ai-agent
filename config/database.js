@@ -33,6 +33,7 @@ const STATUS = {
   CONTACTED: 'contacted',         // First email sent
   FOLLOWUP_1: 'followup_1',       // Day 3 follow-up sent
   FOLLOWUP_2: 'followup_2',       // Day 7 follow-up sent
+  FOLLOWUP_SENT: 'follow_up_sent', // Auto follow-up from scraper check-in
   REPLIED: 'replied',             // They replied to us
   INTERESTED: 'interested',       // 🔥 HOT LEAD — they want to talk
   NOT_INTERESTED: 'not_interested', // They said no

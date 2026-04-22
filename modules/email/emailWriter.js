@@ -140,6 +140,34 @@ async function writeFollowUpEmail(lead, followUpDay) {
   };
 }
 
+// ─── Scraper Check-in (for leads found again) ──────────────────────────────────
+async function writeScraperFollowUpEmail(lead) {
+  const prompt = `Write a extremely short, friendly check-in email for a restaurant owner.
+  
+  Business: ${lead.business_name}
+  Location: ${lead.area}
+  Context: We reached out before about their digital storefront/website. We just saw their listing again while auditing ${lead.area} restaurants.
+  
+  Rules:
+  - Max 3 sentences
+  - Mention: "I was just looking at restaurant listings in ${lead.area} again and saw ${lead.business_name}"
+  - Reference: "Wanted to check if you got my previous email regarding your digital presence?"
+  - Tone: Helpful, not pushy
+  - Subject: Re-checking ${lead.business_name} presence
+  
+  Sign off: Nahid | Naisora`;
+
+  const text = await askClaudeSonnet(prompt);
+  const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
+  const bodyMatch = text.match(/BODY:\s*([\s\S]+)/i);
+
+  return {
+    subject: subjectMatch ? subjectMatch[1].trim() : `Still interested in a site for ${lead.business_name}?`,
+    body: bodyMatch ? bodyMatch[1].trim() : text,
+    lead_id: lead.id
+  };
+}
+
 async function run(leads = null) {
   console.log('✉️ Email writer starting...');
 
@@ -189,4 +217,4 @@ const writeColdEmail = writeEmail;
 const writeFollowup1 = (lead) => writeFollowUpEmail(lead, 3);
 const writeFollowup2 = (lead) => writeFollowUpEmail(lead, 7);
 
-module.exports = { run, writeEmail, writeColdEmail, writeFollowUpEmail, writeFollowup1, writeFollowup2 };
+module.exports = { run, writeEmail, writeColdEmail, writeFollowUpEmail, writeFollowup1, writeFollowup2, writeScraperFollowUpEmail };

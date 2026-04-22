@@ -62,9 +62,8 @@ function loadSession() {
 // ─── Launch browser ───────────────────────────────────────────────────────────
 async function launchBrowser() {
   return await puppeteer.launch({
-    headless: false,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--window-size=1280,800'],
-    defaultViewport: { width: 1280, height: 800 },
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 }
 
@@ -300,4 +299,4 @@ async function runLinkedInOutreach() {
   );
 }
 
-module.exports = { runLinkedInOutreach };
+module.exports = { runLinkedInOutreach, loginLinkedIn };

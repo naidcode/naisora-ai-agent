@@ -218,6 +218,30 @@ async function testSend() {
   }
 }
 
+async function sendScraperFollowUpEmail(lead) {
+  const { writeScraperFollowUpEmail } = require('./emailWriter');
+  
+  try {
+    console.log(`\n🔄 Writing auto follow-up for: ${lead.business_name}...`);
+    const email = await writeScraperFollowUpEmail(lead);
+    
+    console.log(`📧 Subject: ${email.subject}`);
+    const result = await sendEmail(lead.email, email.subject, email.body);
+    
+    if (result.success) {
+      await updateLeadStatus(lead.id, 'follow_up_sent');
+      await logOutreach(lead.id, 'email', 'auto_followup', email.body, {
+        subject: email.subject
+      });
+      console.log(`✅ Auto follow-up sent!`);
+      return true;
+    }
+  } catch (error) {
+    console.error(`❌ Auto follow-up failed for ${lead.email}:`, error.message);
+  }
+  return false;
+}
+
 // ============================================
 // HELPERS
 // ============================================
@@ -243,5 +267,6 @@ module.exports = {
   sendDailyColdEmails,
   sendFollowupEmails1,
   sendFollowupEmails2,
+  sendScraperFollowUpEmail,
   testSend,
 };

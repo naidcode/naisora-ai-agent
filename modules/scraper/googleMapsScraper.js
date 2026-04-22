@@ -51,29 +51,8 @@ const randomDelay = (min = 1500, max = 3500) =>
  */
 async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
   const browser = await puppeteer.launch({
-    headless: 'new',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--no-zygote',
-      '--disable-web-security',
-      '--disable-features=IsolateOrigins,site-per-process',
-      '--window-size=1280,800',
-      '--disable-background-networking',
-      '--disable-default-apps',
-      '--disable-extensions',
-      '--disable-sync',
-      '--disable-translate',
-      '--hide-scrollbars',
-      '--metrics-recording-only',
-      '--mute-audio',
-      '--no-first-run',
-      '--safebrowsing-disable-auto-update'
-    ],
-    defaultViewport: { width: 1280, height: 800 },
-    timeout: 60000
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
   });
 
   const leads = [];
@@ -234,8 +213,19 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
         });
 
         // ── Merge card data + detail page data ──
+        const mapsUrl = lead.mapsUrl.startsWith("http")
+          ? lead.mapsUrl
+          : `https://www.google.com${lead.mapsUrl}`;
+        
+        let placeId = null;
+        const placeIdMatch = mapsUrl.match(/!1s(0x[0-9a-f]+:0x[0-9a-f]+)/);
+        if (placeIdMatch) {
+          placeId = placeIdMatch[1];
+        }
+
         leads.push({
           name: lead.name,
+          place_id: placeId,
           area: area,
           search_type: searchType,
           rating: details.rating || lead.rating || null,
@@ -250,9 +240,7 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
           website: details.website || null,
           has_website: !!details.website,
           gbp_verified: details.verified || false,
-          google_maps_url: lead.mapsUrl.startsWith("http")
-            ? lead.mapsUrl
-            : `https://www.google.com${lead.mapsUrl}`,
+          google_maps_url: mapsUrl,
           scraped_at: new Date().toISOString(),
           outreach_status: "new",
           source: "google_maps",

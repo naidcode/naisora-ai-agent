@@ -68,7 +68,7 @@ function nameSimilarity(a, b) {
 async function fetchExistingLeads() {
   const { data, error } = await supabase
     .from("leads")
-    .select("id, business_name, phone, area, outreach_status, lead_category")
+    .select("id, place_id, business_name, phone, area, outreach_status, lead_category")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -82,6 +82,17 @@ async function fetchExistingLeads() {
 // ─── Check a single lead against existing leads ───────────────────────────────
 function checkDuplicate(newLead, existingLeads) {
   for (const existing of existingLeads) {
+    // ── Layer 0: Exact place_id match (Unique Google identifier) ──
+    if (newLead.place_id && existing.place_id && newLead.place_id === existing.place_id) {
+      return {
+        isDuplicate: true,
+        reason: "place_id",
+        matchedId: existing.id,
+        existingStatus: existing.outreach_status,
+        label: `ID match: ${existing.place_id}`,
+      };
+    }
+
     // Layer 1: Exact phone match (strongest signal)
     if (newLead.phone && existing.phone && newLead.phone === existing.phone) {
       return {
@@ -157,6 +168,7 @@ async function deduplicateLeads(processedLeads) {
   console.log(`📊 Existing leads in DB: ${existingLeads.length}\n`);
 
   const newLeads = [];
+  const followUpLeads = [];
   const duplicates = [];
   const unreachable = [];
 
@@ -191,16 +203,27 @@ async function deduplicateLeads(processedLeads) {
     const dupCheck = checkDuplicate(lead, existingLeads);
 
     if (dupCheck.isDuplicate) {
-      // Log already-contacted leads differently
-      const statusNote =
-        dupCheck.existingStatus !== "new"
-          ? ` [Already ${dupCheck.existingStatus.toUpperCase()}]`
-          : "";
+      // ── Logic: If already CONTACTED/SENT, trigger follow-up flow ──
+      const isContacted = dupCheck.existingStatus === "contacted" || dupCheck.existingStatus === "sent";
+      
+      if (isContacted) {
+        console.log(`🔁 FOLLOW-UP — ${lead.business_name} (${lead.area}) [Previous: ${dupCheck.existingStatus}]`);
+        followUpLeads.push({ 
+          ...lead, 
+          id: dupCheck.matchedId,
+          existing_status: dupCheck.existingStatus 
+        });
+      } else {
+        const statusNote =
+          dupCheck.existingStatus !== "new"
+            ? ` [Already ${dupCheck.existingStatus.toUpperCase()}]`
+            : "";
 
-      console.log(
-        `⏭️  SKIP — ${lead.business_name} (${lead.area})\n` +
-          `   Reason: ${dupCheck.label}${statusNote}\n`,
-      );
+        console.log(
+          `⏭️  SKIP — ${lead.business_name} (${lead.area})\n` +
+            `   Reason: ${dupCheck.label}${statusNote}\n`,
+        );
+      }
 
       duplicates.push({
         lead,
@@ -208,6 +231,7 @@ async function deduplicateLeads(processedLeads) {
         matchedId: dupCheck.matchedId,
         label: dupCheck.label,
         existingStatus: dupCheck.existingStatus,
+        isFollowUp: isContacted
       });
     } else {
       // ── Brand new lead ──
@@ -234,7 +258,8 @@ async function deduplicateLeads(processedLeads) {
   const summary = {
     total_checked: processedLeads.length,
     new_leads: newLeads.length,
-    duplicates_skipped: duplicates.length,
+    follow_up_leads: followUpLeads.length,
+    duplicates_skipped: duplicates.length - followUpLeads.length,
     unreachable_skipped: unreachable.length,
     hot_new: hotNew,
     warm_new: warmNew,
@@ -254,6 +279,7 @@ async function deduplicateLeads(processedLeads) {
     `🔍 *Deduplication Complete*\n\n` +
       `Checked: ${summary.total_checked}\n` +
       `✅ New leads ready: *${summary.new_leads}*\n` +
+      `🔁 Auto Follow-ups: *${summary.follow_up_leads}*\n` +
       `🔥 Hot (WhatsApp now): *${hotNew}*\n` +
       `🌡️ Warm: ${warmNew}\n` +
       `⏭️ Skipped (dupes): ${summary.duplicates_skipped}\n` +
@@ -262,6 +288,7 @@ async function deduplicateLeads(processedLeads) {
 
   return {
     newLeads,
+    followUpLeads,
     duplicates,
     unreachable,
     summary,
@@ -325,6 +352,24 @@ async function getReadyLeads(rawLeads) {
       console.log(
         `\n💾 Saved ${dedupResult.newLeads.length} new leads to Supabase`,
       );
+    }
+  }
+
+  // ── Step 4: Handle Auto Follow-ups for existing leads ──
+  if (dedupResult.followUpLeads.length > 0) {
+    const { sendScraperFollowUpEmail } = require('../email/emailSender');
+    console.log(`\n📧 Sending ${dedupResult.followUpLeads.length} auto follow-up emails...`);
+    
+    for (const lead of dedupResult.followUpLeads) {
+      // Check if they have an email (many Maps leads don't)
+      if (lead.email) {
+        await sendScraperFollowUpEmail(lead);
+      } else {
+        console.log(`⚠️  Skipping follow-up for ${lead.business_name} (no email found)`);
+      }
+      
+      // Delay to avoid spam filters
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
 
