@@ -16,15 +16,56 @@ if (fs.existsSync('.env')) {
   });
 }
 
-const transporter = nodemailer.createTransport({
+// 1. Initial Transporter Config (Port 465)
+let transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.hostinger.com',
-  port: parseInt(process.env.SMTP_PORT || '465'),
-  secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: true,
   auth: {
-    user: process.env.YOUR_EMAIL,
-    pass: process.env.SMTP_PASS,
+    user: process.env.SMTP_USER || process.env.YOUR_EMAIL,
+    pass: process.env.SMTP_PASS
   },
+  tls: {
+    rejectUnauthorized: false
+  }
 });
+
+// 2. Fallback logic and Detailed Logging
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ SMTP failed:', error.message);
+    console.error('Host:', process.env.SMTP_HOST);
+    console.error('Port:', process.env.SMTP_PORT);
+    console.error('User:', process.env.SMTP_USER || process.env.YOUR_EMAIL);
+
+    console.log('🔄 Attempting fallback to port 587...');
+    
+    // Fallback — try port 587 if 465 fails
+    transporter = nodemailer.createTransport({
+      host: 'smtp.hostinger.com',
+      port: 587,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER || process.env.YOUR_EMAIL,
+        pass: process.env.SMTP_PASS
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+
+    transporter.verify((fallbackError, fallbackSuccess) => {
+      if (fallbackError) {
+        console.error('❌ Fallback SMTP failed:', fallbackError.message);
+      } else {
+        console.log('✅ Fallback SMTP connected successfully (Port 587)');
+      }
+    });
+  } else {
+    console.log('✅ SMTP connected successfully');
+  }
+});
+
 
 async function sendEmail(to, subject, body) {
   try {
