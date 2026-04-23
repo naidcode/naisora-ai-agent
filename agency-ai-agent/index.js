@@ -3,6 +3,7 @@
 // Naisora AI Agent v2.0
 // Command: node index.js
 // ============================================
+
 // Load .env directly — dotenv was adding hidden \r characters to keys
 const fs = require('fs');
 if (fs.existsSync('.env')) {
@@ -20,7 +21,7 @@ const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testEmail } = require("./config/smtp");
 const { testConnection: testTelegram } = require("./config/telegram");
-const { connectWhatsApp, getWhatsAppStatus, sendWhatsAppMessage } = require("./config/whatsapp");
+const { sendWhatsAppMessage } = require("./config/whatsapp");
 const { startAllJobs } = require("./scheduler/cronJobs");
 const {
   scrapeOne,
@@ -123,9 +124,9 @@ async function showMenu() {
               searchTypes: ["restaurants", "cafes"],
               maxPerSearch: 15,
             });
-            const processed = await processLeads(rawLeads, false);
-            const allLeads = [...processed.hot_leads, ...processed.warm_leads];
-            await deduplicateLeads(allLeads);
+            const { getReadyLeads } = require("./modules/scraper/leadDeduplicator");
+            const result = await getReadyLeads(rawLeads);
+            console.log(`\n✅ Session Complete: ${result.newLeads.length} new, ${result.followUpLeads.length} follow-ups.`);
             break;
           }
 
@@ -285,99 +286,6 @@ async function startAgent() {
 
   if (IS_RAILWAY) {
     console.log("☁️  Running on Railway — server mode (no interactive menu)\n");
-    // Start HTTP server immediately so Railway health check passes
-    const express = require('express')
-    const app = express()
-    const EventEmitter = require('events')
-    const logEmitter = new EventEmitter()
-    
-    // Wrap console.log to emit logs for SSE
-    const originalLog = console.log
-    const originalError = console.error
-    
-    console.log = (...args) => {
-      originalLog(...args)
-      logEmitter.emit('log', { 
-        time: new Date().toISOString(), 
-        message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 
-        type: 'info',
-        source: 'AGENT'
-      })
-    }
-    
-    console.error = (...args) => {
-      originalError(...args)
-      logEmitter.emit('log', { 
-        time: new Date().toISOString(), 
-        message: args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' '), 
-        type: 'error',
-        source: 'AGENT'
-      })
-    }
-
-    app.use(express.json())
-    
-    // Simple CORS middleware
-    app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', '*');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-      res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, x-api-secret');
-      if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
-      }
-      next();
-    });
-    
-    const SECRET = process.env.AGENT_API_SECRET || 'naisora_secret_2026'
-    
-    const auth = (req, res, next) => {
-      const key = req.headers['x-api-secret'] || req.query.secret
-      if (key !== SECRET) return res.status(401).json({ error: 'Unauthorized' })
-      next()
-    }
-    
-    // Public routes — no auth
-    app.get('/ping', (req, res) => res.json({ ok: true }))
-    app.get('/status', (req, res) => res.json({
-      status: isStopped() ? 'stopped' : 'running',
-      uptime: process.uptime(),
-      memory: process.memoryUsage(),
-      timestamp: new Date().toISOString()
-    }))
-    
-    // Protected routes
-    app.post('/run-module', auth, async (req, res) => {
-      const { module, params } = req.body
-      console.log(`[API] Triggering module: ${module}`)
-      try {
-        let mod;
-        try { mod = require(`./modules/${module}`) } catch (e) { mod = require(`./${module}`) }
-        const runFn = mod.run || mod.start || mod.execute || mod.main || (typeof mod === 'function' ? mod : null)
-        if (!runFn) throw new Error(`Module ${module} has no entry point`)
-        const result = await runFn(params)
-        res.json({ success: true, result })
-      } catch (err) {
-        console.error(`[API] Module error (${module}): ${err.message}`)
-        res.status(500).json({ success: false, error: err.message })
-      }
-    })
-    
-    app.get('/logs', auth, (req, res) => {
-      res.setHeader('Content-Type', 'text/event-stream')
-      res.setHeader('Cache-Control', 'no-cache')
-      res.setHeader('Connection', 'keep-alive')
-      const onLog = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`)
-      logEmitter.on('log', onLog)
-      const heartbeat = setInterval(() => {
-        res.write(`data: ${JSON.stringify({ time: new Date().toISOString(), message: '--- ping ---', type: 'system' })}\n\n`)
-      }, 30000)
-      req.on('close', () => { logEmitter.removeListener('log', onLog); clearInterval(heartbeat); })
-    })
-    
-    const PORT = process.env.PORT || 3000
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`✅ Agent API listening on port ${PORT}`)
-    })
   } else {
     console.log("💻 Running locally\n");
   }
@@ -399,8 +307,7 @@ async function startAgent() {
     claude: false,
     database: false,
     email: false,
-    telegram: false,
-    whatsapp: false
+    telegram: false
   };
 
   try {
@@ -433,16 +340,6 @@ async function startAgent() {
     );
   }
 
-  // Connect WhatsApp if enabled
-  if (process.env.WHATSAPP_ENABLED === 'true') {
-    try {
-      await connectWhatsApp();
-      results.whatsapp = true;
-    } catch (e) {
-      console.error("❌ WhatsApp failed to connect:", e.message);
-    }
-  }
-
   console.log("\n" + "─".repeat(42));
   console.log("📊 CONNECTION STATUS:\n");
   console.log(
@@ -458,8 +355,9 @@ async function startAgent() {
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📱 WhatsApp:     ${getWhatsAppStatus()}`,
+    `  📱 WhatsApp:     ☁️  Queue Mode (Railway) / 💻 Service Mode (Local)`,
   );
+
 
   if (!results.database) {
     console.log("\n❌ Database connection failed. Cannot start agent.");
@@ -485,6 +383,25 @@ async function startAgent() {
 
   console.log("─".repeat(42));
   console.log("\n🤖 Naisora Agent is live.\n");
+
+  // ── On Railway: keep process alive, no interactive menu ──
+  if (IS_RAILWAY) {
+    console.log(
+      "☁️  Railway mode — cron jobs running, waiting for scheduled tasks...",
+    );
+    console.log("📱 You will receive Telegram alerts for all activity.\n");
+    // Keep process alive on Railway
+    // Keep alive + start HTTP
+const express = require('express')
+const app = express()
+app.get('/status', (req, res) => res.json({ status: 'running', uptime: process.uptime() }))
+app.get('/ping', (req, res) => res.send('ok'))
+app.listen(process.env.PORT || 3000, '0.0.0.0')
+  } else {
+    // Local: show interactive menu
+    console.log("💻 Local mode — showing interactive menu...\n");
+    showMenu();
+  }
 }
 
 // ============================================
@@ -495,5 +412,3 @@ startAgent().catch((error) => {
   console.error(error.stack);
   process.exit(1);
 });
-
-

@@ -21,7 +21,7 @@ const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testEmail } = require("./config/smtp");
 const { testConnection: testTelegram } = require("./config/telegram");
-const { connectWhatsApp, getWhatsAppStatus, sendWhatsAppMessage } = require("./config/whatsapp");
+const { sendWhatsAppMessage } = require("./config/whatsapp");
 const { startAllJobs } = require("./scheduler/cronJobs");
 const {
   scrapeOne,
@@ -342,16 +342,6 @@ async function startAgent() {
     );
   }
 
-  // Connect WhatsApp if enabled
-  if (process.env.WHATSAPP_ENABLED === 'true') {
-    try {
-      await connectWhatsApp();
-      results.whatsapp = true;
-    } catch (e) {
-      console.error("❌ WhatsApp failed to connect:", e.message);
-    }
-  }
-
   console.log("\n" + "─".repeat(42));
   console.log("📊 CONNECTION STATUS:\n");
   console.log(
@@ -367,7 +357,7 @@ async function startAgent() {
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📱 WhatsApp:     ${getWhatsAppStatus()}`,
+    `  📱 WhatsApp:     ☁️  Queue Mode (Railway) / 💻 Service Mode (Local)`,
   );
 
 
