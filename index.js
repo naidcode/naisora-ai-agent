@@ -21,7 +21,7 @@ const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testEmail } = require("./config/smtp");
 const { testConnection: testTelegram } = require("./config/telegram");
-const { connectWhatsApp, sendWhatsAppMessage } = require("./config/whatsapp");
+const { connectWhatsApp, getWhatsAppStatus, sendWhatsAppMessage } = require("./config/whatsapp");
 const { startAllJobs } = require("./scheduler/cronJobs");
 const {
   scrapeOne,
@@ -367,7 +367,7 @@ async function startAgent() {
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📱 WhatsApp:     ${results.whatsapp ? "✅ Connected" : "❌ Failed"}`,
+    `  📱 WhatsApp:     ${getWhatsAppStatus()}`,
   );
 
 

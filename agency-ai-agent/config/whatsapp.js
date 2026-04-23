@@ -5,15 +5,19 @@ const P = require('pino');
 const logger = P({ level: 'silent' });
 
 let sock = null;
+let connectionState = 'NOT_CONNECTED'; // NOT_CONNECTED, CONNECTING, CONNECTED
 
 async function connectWhatsApp() {
   const authPath = path.join(__dirname, '../auth_info_baileys');
   const credsPath = path.join(authPath, 'creds.json');
 
   if (!fs.existsSync(credsPath)) {
+    connectionState = 'NOT_CONNECTED';
     console.log('⚠️ WhatsApp not connected — run connect-whatsapp.mjs locally first');
     return null;
   }
+
+  connectionState = 'CONNECTING';
 
   const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = await import('@whiskeysockets/baileys');
   
@@ -31,22 +35,23 @@ async function connectWhatsApp() {
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect, qr } = update;
     if (qr) {
-      // In production/Railway, we don't want to generate QR if session is already saved
-      // But if session is invalid, we might get a QR
       console.log('📱 SCAN THIS QR CODE WITH YOUR WHATSAPP:');
       qrcode.generate(qr, { small: true });
     }
     if (connection === 'close') {
+      connectionState = 'CONNECTING';
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       if (shouldReconnect) {
         console.log(`🔄 Connection closed (Status ${statusCode}). Reconnecting in 5s...`);
         setTimeout(() => connectWhatsApp(), 5000);
       } else {
+        connectionState = 'NOT_CONNECTED';
         console.log('❌ WhatsApp logged out — run connect-whatsapp.mjs locally again');
       }
     }
     if (connection === 'open') {
+      connectionState = 'CONNECTED';
       console.log('✅ WhatsApp: Connected');
     }
   });
@@ -55,14 +60,23 @@ async function connectWhatsApp() {
   return sock;
 }
 
+function getWhatsAppStatus() {
+  const authPath = path.join(__dirname, '../auth_info_baileys');
+  const credsPath = path.join(authPath, 'creds.json');
+  
+  if (!fs.existsSync(credsPath)) return '❌ Not connected';
+  if (connectionState === 'CONNECTED') return '✅ Connected';
+  if (connectionState === 'CONNECTING') return '⚠️ Session found — connecting...';
+  return '❌ Not connected';
+}
+
 async function sendWhatsAppMessage(phone, message) {
   try {
-    if (!sock) {
+    if (!sock || connectionState !== 'CONNECTED') {
       console.log('⏭️ Skipping WhatsApp (Not Connected)');
       return false;
     }
     
-    // Clean phone number: remove non-digits
     const cleanPhone = phone.toString().replace(/\D/g, '');
     const jid = cleanPhone.startsWith('91') ? `${cleanPhone}@s.whatsapp.net` : `91${cleanPhone}@s.whatsapp.net`;
     
@@ -79,4 +93,4 @@ async function sendWhatsAppMessage(phone, message) {
   }
 }
 
-module.exports = { connectWhatsApp, sendWhatsAppMessage };
+module.exports = { connectWhatsApp, getWhatsAppStatus, sendWhatsAppMessage };
