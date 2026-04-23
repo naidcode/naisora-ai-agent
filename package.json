@@ -15,7 +15,7 @@
     "@aws-sdk/client-bedrock-runtime": "^3.1014.0",
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.39.0",
-    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "@whiskeysockets/baileys": "^6.7.9",
     "axios": "^1.6.7",
     "dotenv": "^16.4.1",
     "express": "^5.2.1",
