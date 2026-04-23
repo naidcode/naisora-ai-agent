@@ -1,26 +1,29 @@
 // modules/outreach/whatsappSender.js
-// Naisora AI Agent — WhatsApp Sender (Baileys Version)
+// Naisora AI Agent — WhatsApp Sender (Queue Mode for Railway)
 
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
-const { sendWhatsAppMessage } = require('../../config/whatsapp');
 
 const DAILY_LIMIT = 25;
 
-const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
-// Check how many messages sent today
+// Check how many messages sent or queued today
 async function getTodayCount() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const { count } = await supabase
+  // Check outreach_log (actual sends) + whatsapp_queue (pending/queued)
+  const { count: logCount } = await supabase
     .from('outreach_log')
     .select('*', { count: 'exact', head: true })
     .eq('channel', 'whatsapp')
     .gte('sent_at', todayStart.toISOString());
 
-  return count || 0;
+  const { count: queueCount } = await supabase
+    .from('whatsapp_queue')
+    .select('*', { count: 'exact', head: true })
+    .gte('created_at', todayStart.toISOString());
+
+  return (logCount || 0) + (queueCount || 0);
 }
 
 // Main daily outreach
@@ -31,7 +34,7 @@ async function sendDailyWhatsApp() {
   }
 
   console.log('\n╔══════════════════════════════════════════════╗');
-  console.log('║     NAISORA — WhatsApp Outreach (Baileys)    ║');
+  console.log('║     NAISORA — WhatsApp Outreach (Queue)      ║');
   console.log('╚══════════════════════════════════════════════╝');
 
   const todayCount = await getTodayCount();
@@ -43,7 +46,7 @@ async function sendDailyWhatsApp() {
     return;
   }
 
-  console.log(`📊 Today: ${todayCount} sent, ${remaining} remaining\n`);
+  console.log(`📊 Today: ${todayCount} handled, ${remaining} remaining\n`);
 
   const { data: leads } = await supabase
     .from('leads')
@@ -59,38 +62,33 @@ async function sendDailyWhatsApp() {
     return;
   }
 
-  console.log(`🎯 ${leads.length} hot leads to contact today\n`);
+  console.log(`🎯 ${leads.length} hot leads to queue today\n`);
 
-  let sent = 0;
-  let failed = 0;
+  let queued = 0;
 
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
 
-    console.log(`\n📱 [${i + 1}/${leads.length}] Contacting: ${lead.business_name}`);
+    console.log(`\n📱 [${i + 1}/${leads.length}] Queuing: ${lead.business_name}`);
 
     const message = `Hi ${lead.business_name} 👋
-
-I noticed your restaurant doesn't have a strong online presence.
+    
+I noticed your restaurant doesn't have a strong online presence. 
 I help restaurants in Bangalore get more customers from Google — without paying Zomato commission.
 
 I already did a free audit for your website. Can I share the results?
 
 — Nahid, Naisora`;
 
-    const success = await sendWhatsAppMessage(lead.phone, message);
+    // INSERT into whatsapp_queue instead of sending directly
+    const { error } = await supabase.from('whatsapp_queue').insert({
+      phone: lead.phone,
+      message: message,
+      status: 'pending'
+    });
 
-    if (success) {
-      sent++;
-      await supabase.from('outreach_log').insert({
-        lead_id: lead.id,
-        channel: 'whatsapp',
-        message_type: 'cold',
-        message_text: message,
-        sent_at: new Date().toISOString(),
-        delivered: true
-      });
-
+    if (!error) {
+      queued++;
       await supabase
         .from('leads')
         .update({
@@ -101,24 +99,19 @@ I already did a free audit for your website. Can I share the results?
         })
         .eq('id', lead.id);
     } else {
-      failed++;
-    }
-
-    if (sent + todayCount >= DAILY_LIMIT) {
-      console.log('🛑 Daily WhatsApp limit reached');
-      break;
+      console.error(`❌ Failed to queue for ${lead.business_name}:`, error.message);
     }
   }
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`📊 WhatsApp Summary: ${sent} sent, ${failed} failed`);
+  console.log(`📊 WhatsApp Queue: ${queued} messages added`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
   await sendMessage(
-    `📱 *WhatsApp Outreach Complete*\n\n` +
-    `✅ Sent: ${sent}\n` +
-    `❌ Failed: ${failed}\n` +
-    `📊 Today total: ${todayCount + sent}/${DAILY_LIMIT}`
+    `📱 *WhatsApp Outreach Queued*\n\n` +
+    `✅ Queued: ${queued}\n` +
+    `📊 Today total: ${todayCount + queued}/${DAILY_LIMIT}\n\n` +
+    `💻 Run local whatsapp-service.js to send.`
   );
 }
 
@@ -149,17 +142,20 @@ async function sendFollowUp() {
     return;
   }
 
-  let sent = 0;
+  let queued = 0;
 
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
-
     const message = `Hi ${lead.business_name} 👋, just following up on my previous message. Did you get a chance to see the free audit I did for your website?`;
 
-    const success = await sendWhatsAppMessage(lead.phone, message);
+    const { error } = await supabase.from('whatsapp_queue').insert({
+      phone: lead.phone,
+      message: message,
+      status: 'pending'
+    });
 
-    if (success) {
-      sent++;
+    if (!error) {
+      queued++;
       await supabase
         .from('leads')
         .update({
@@ -168,16 +164,11 @@ async function sendFollowUp() {
         })
         .eq('id', lead.id);
     }
-
-    if (sent + todayCount >= DAILY_LIMIT) {
-      console.log('🛑 Daily WhatsApp limit reached');
-      break;
-    }
   }
 
-  console.log(`✅ Follow-ups sent: ${sent}`);
-  if (sent > 0) {
-    await sendMessage(`🔄 Follow-ups sent: ${sent} WhatsApp messages`);
+  console.log(`✅ Follow-ups queued: ${queued}`);
+  if (queued > 0) {
+    await sendMessage(`🔄 Follow-ups queued: ${queued} WhatsApp messages`);
   }
 }
 
