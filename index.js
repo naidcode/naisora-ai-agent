@@ -286,7 +286,6 @@ async function startAgent() {
 
   if (IS_RAILWAY) {
     console.log("☁️  Running on Railway — server mode (no interactive menu)\n");
-    console.log("📱 Scan QR code from Railway logs to connect WhatsApp\n");
   } else {
     console.log("💻 Running locally\n");
   }
@@ -308,8 +307,7 @@ async function startAgent() {
     claude: false,
     database: false,
     email: false,
-    telegram: false,
-    whatsapp: false
+    telegram: false
   };
 
   try {
@@ -414,5 +412,3 @@ startAgent().catch((error) => {
   console.error(error.stack);
   process.exit(1);
 });
-
-
