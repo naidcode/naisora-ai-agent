@@ -1,5 +1,7 @@
 const qrcode = require('qrcode-terminal');
 const path = require('path');
+const P = require('pino');
+const logger = P({ level: 'silent' });
 
 let sock = null;
 
@@ -12,7 +14,11 @@ async function connectWhatsApp() {
 
   sock = makeWASocket({
     auth: state,
-    printQRInTerminal: false
+    printQRInTerminal: false,
+    logger,
+    browser: ['Naisora Agent', 'Chrome', '1.0.0'],
+    connectTimeoutMs: 60000,
+    retryRequestDelayMs: 2000
   });
 
   sock.ev.on('connection.update', (update) => {
@@ -22,10 +28,11 @@ async function connectWhatsApp() {
       qrcode.generate(qr, { small: true });
     }
     if (connection === 'close') {
-      const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      console.log(`🔄 Connection closed. Status: ${statusCode}. Reconnecting: ${shouldReconnect}`);
       if (shouldReconnect) {
-        console.log('🔄 Reconnecting WhatsApp...');
-        connectWhatsApp();
+        setTimeout(() => connectWhatsApp(), 5000);
       } else {
         console.log('❌ WhatsApp logged out — rescan QR');
       }
