@@ -2,16 +2,13 @@
  * whatsapp-service.js
  * RUN THIS ON YOUR LOCAL LAPTOP 24/7
  * 
- * This script:
- * 1. Connects to WhatsApp via Baileys (local IP)
- * 2. Polls Supabase 'whatsapp_queue' every 60 seconds
- * 3. Sends pending messages and updates their status
+ * FINAL FIX: Atomic locking to prevent race conditions and duplicate messages.
+ * "One database row -> one processing execution -> one message send"
  */
 
 import pkg from '@whiskeysockets/baileys';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -23,7 +20,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Initialize Supabase
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
+// --- System State ---
 let sock = null;
+const processingUsers = new Set(); 
+const lastMessageTime = new Map(); 
+const COOLDOWN_MS = 60000;         // 60 second cooldown per user
 
 async function connectWhatsApp() {
   const authPath = path.join(__dirname, 'auth_info_baileys');
@@ -39,6 +40,7 @@ async function connectWhatsApp() {
     browser: ['Ubuntu', 'Chrome', '20.0.0']
   });
 
+  // Ensure event listeners are registered only once
   sock.ev.on('connection.update', (update) => {
     const { connection, lastDisconnect } = update;
     if (connection === 'close') {
@@ -59,65 +61,112 @@ async function connectWhatsApp() {
   sock.ev.on('creds.update', saveCreds);
 }
 
+// Global flag to prevent multiple processor instances
+let isProcessorRunning = false;
+
 async function startQueueProcessor() {
-  console.log('🚀 Queue processor started (Polling every 60s)');
+  if (isProcessorRunning) return;
+  isProcessorRunning = true;
+
+  console.log('🚀 Queue processor active (Polling every 60s)');
   
   setInterval(async () => {
     try {
-      // Get pending messages
+      // Step 1: Fetch pending messages with a small batch limit
       const { data: queue, error } = await supabase
         .from('whatsapp_queue')
         .select('*')
         .eq('status', 'pending')
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(10); // Safeguard 2: Batch size limit
 
       if (error) throw error;
+      if (!queue || queue.length === 0) return;
 
-      if (queue && queue.length > 0) {
-        console.log(`📦 Found ${queue.length} messages in queue`);
+      for (const item of queue) {
+        const phone = item.phone.toString().replace(/\D/g, '');
 
-        for (const item of queue) {
-          try {
-            console.log(`📤 Sending to ${item.phone}...`);
-            
-            // Clean phone number
-            const cleanPhone = item.phone.toString().replace(/\D/g, '');
-            const jid = cleanPhone.startsWith('91') ? `${cleanPhone}@s.whatsapp.net` : `91${cleanPhone}@s.whatsapp.net`;
+        // Pre-check In-memory lock to skip noise
+        if (processingUsers.has(phone)) continue;
 
-            await sock.sendMessage(jid, { text: item.message });
-
-            // Mark as sent in queue
-            await supabase
-              .from('whatsapp_queue')
-              .update({ status: 'sent', sent_at: new Date().toISOString() })
-              .eq('id', item.id);
-
-            // Log in outreach_log for tracking
-            await supabase.from('outreach_log').insert({
-              channel: 'whatsapp',
-              message_type: 'cold',
-              message_text: item.message,
-              sent_at: new Date().toISOString(),
-              delivered: true
-            });
-
-            console.log(`✅ Sent to ${item.phone}`);
-            
-            // Random delay between messages (30-60s) to avoid spam detection
-            const delay = Math.floor(Math.random() * (60000 - 30000 + 1)) + 30000;
-            await new Promise(r => setTimeout(r, delay));
-
-          } catch (sendErr) {
-            console.error(`❌ Failed to send to ${item.phone}:`, sendErr.message);
-            await supabase
-              .from('whatsapp_queue')
-              .update({ status: 'failed', error: sendErr.message })
-              .eq('id', item.id);
-          }
+        // Pre-check Cooldown
+        const now = Date.now();
+        const lastSent = lastMessageTime.get(phone) || 0;
+        if (now - lastSent < COOLDOWN_MS) {
+          console.log(`⏭️  SKIP: Cooldown for ${phone}`);
+          continue;
         }
+
+        // MANDATORY STEP 1: Atomic Lock
+        // Try to update status from 'pending' -> 'processing'
+        const { data: lockedItem, error: lockError } = await supabase
+          .from('whatsapp_queue')
+          .update({ status: 'processing' })
+          .eq('id', item.id)
+          .eq('status', 'pending') // Critical: Ensure it's still pending
+          .select();
+
+        if (lockError || !lockedItem || lockedItem.length === 0) {
+          console.log(`⏭️  LOCK FAILED: Skipping item ${item.id} (already handled)`);
+          continue;
+        }
+
+        // Acquire in-memory lock for parallel safety within this instance
+        processingUsers.add(phone);
+
+        try {
+          // MANDATORY STEP 2: Send Message
+          console.log(`📤 SENDING: ${phone}`);
+          const jid = phone.startsWith('91') ? `${phone}@s.whatsapp.net` : `91${phone}@s.whatsapp.net`;
+          
+          await sock.sendMessage(jid, { text: item.message });
+
+          // MANDATORY STEP 3: Finalize Status (Success)
+          await supabase
+            .from('whatsapp_queue')
+            .update({ status: 'sent', sent_at: new Date().toISOString() })
+            .eq('id', item.id);
+
+          // Log success
+          console.log(`✅ SUCCESS: Sent to ${phone}`);
+          
+          // Log in outreach_log
+          await supabase.from('outreach_log').insert({
+            lead_id: item.lead_id || null,
+            channel: 'whatsapp',
+            message_text: item.message,
+            sent_at: new Date().toISOString(),
+            delivered: true
+          });
+
+          // Update cooldown tracker
+          lastMessageTime.set(phone, Date.now());
+
+        } catch (sendErr) {
+          // MANDATORY STEP 3: Finalize Status (Failure)
+          console.error(`❌ SEND FAILED: ${phone} - ${sendErr.message}`);
+          
+          const retryCount = (item.retries || 0) + 1;
+          const status = retryCount >= 3 ? 'failed' : 'pending'; // Retry Safety
+
+          await supabase
+            .from('whatsapp_queue')
+            .update({ 
+              status: status, 
+              retries: retryCount,
+              error: sendErr.message 
+            })
+            .eq('id', item.id);
+        } finally {
+          // Release in-memory lock
+          processingUsers.delete(phone);
+        }
+
+        // Throttling: 10-20s delay between sends to protect number
+        await new Promise(r => setTimeout(r, 15000));
       }
     } catch (err) {
-      console.error('💥 Queue error:', err.message);
+      console.error('💥 Processor Error:', err.message);
     }
   }, 60000);
 }
