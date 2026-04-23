@@ -1,39 +1,13 @@
 // modules/outreach/whatsappSender.js
-// Naisora AI Agent — WhatsApp Sender (Clean v3)
-
-// Load .env directly — dotenv was adding hidden \r characters to keys
-const fs = require('fs');
-if (fs.existsSync('.env')) {
-  const envContent = fs.readFileSync('.env', 'utf8');
-  envContent.split('\n').forEach(line => {
-    const cleaned = line.replace(/\r/g, '').trim();
-    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
-      const [key, ...rest] = cleaned.split('=');
-      process.env[key.trim()] = rest.join('=').trim();
-    }
-  });
-}
+// Naisora AI Agent — WhatsApp Sender (Baileys Version)
 
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
+const { sendWhatsAppMessage } = require('../../config/whatsapp');
 
-const DAILY_LIMIT = 50;
+const DAILY_LIMIT = 25;
 
 const delay = (ms) => new Promise(r => setTimeout(r, ms));
-const randomDelay = () => delay(Math.floor(Math.random() * (8 * 60000 - 3 * 60000) + 3 * 60000));
-
-// Twilio initialised inside function — never at top level
-function getTwilioClient() {
-  const twilio = require('twilio');
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-    throw new Error('TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN missing from .env');
-  }
-  return twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-}
-
-function getFromNumber() {
-  return process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
-}
 
 // Check how many messages sent today
 async function getTodayCount() {
@@ -49,70 +23,23 @@ async function getTodayCount() {
   return count || 0;
 }
 
-// Send a single WhatsApp message
-async function sendWhatsApp(lead, message, variant = null) {
-  const toNumber = `whatsapp:${lead.phone}`;
-
-  try {
-    const client = getTwilioClient();
-    const result = await client.messages.create({
-      from: getFromNumber(),
-      to: toNumber,
-      body: message,
-    });
-
-    await supabase.from('outreach_log').insert({
-      lead_id: lead.id,
-      channel: 'whatsapp',
-      message_type: 'cold',
-      message_text: message,
-      variant: variant || null,    // ← A/B tag for optimization engine
-      sent_at: new Date().toISOString(),
-      delivered: true,
-      twilio_sid: result.sid,
-    });
-
-    await supabase
-      .from('leads')
-      .update({
-        outreach_status: 'contacted',
-        outreach_channel: 'whatsapp',
-        whatsapp_count: (lead.whatsapp_count || 0) + 1,
-        last_contacted_at: new Date().toISOString(),
-      })
-      .eq('id', lead.id);
-
-    console.log(`✅ WhatsApp sent → ${lead.business_name} (${lead.phone})`);
-    return { success: true, sid: result.sid };
-
-  } catch (err) {
-    console.error(`❌ WhatsApp failed → ${lead.business_name}: ${err.message}`);
-
-    await supabase.from('outreach_log').insert({
-      lead_id: lead.id,
-      channel: 'whatsapp',
-      message_type: 'cold',
-      message_text: message,
-      variant: variant || null,    // ← A/B tag even on failed sends
-      sent_at: new Date().toISOString(),
-      delivered: false,
-    });
-
-    return { success: false, error: err.message };
-  }
-}
-
 // Main daily outreach
 async function sendDailyWhatsApp() {
+  if (process.env.WHATSAPP_ENABLED !== 'true') {
+    console.log('⏭️  WhatsApp outreach disabled (WHATSAPP_ENABLED != true)');
+    return;
+  }
+
   console.log('\n╔══════════════════════════════════════════════╗');
-  console.log('║     NAISORA — WhatsApp Outreach              ║');
+  console.log('║     NAISORA — WhatsApp Outreach (Baileys)    ║');
   console.log('╚══════════════════════════════════════════════╝');
 
   const todayCount = await getTodayCount();
   const remaining = DAILY_LIMIT - todayCount;
 
   if (remaining <= 0) {
-    console.log(`⛔ Daily limit reached (${DAILY_LIMIT} messages). Try again tomorrow.`);
+    console.log('🛑 Daily WhatsApp limit reached');
+    await sendMessage('🛑 Daily WhatsApp limit reached (25 messages)');
     return;
   }
 
@@ -122,21 +49,17 @@ async function sendDailyWhatsApp() {
     .from('leads')
     .select('*')
     .eq('lead_category', 'hot')
-    .eq('outreach_status', 'new')
+    .neq('outreach_status', 'whatsapp_sent')
     .not('phone', 'is', null)
     .order('lead_score', { ascending: false })
     .limit(remaining);
 
   if (!leads || leads.length === 0) {
-    console.log('📭 No new hot leads to contact today.');
-    await sendMessage('📭 WhatsApp Outreach: No new hot leads today. Run scraper to find more.');
+    console.log('📭 No hot leads ready for WhatsApp today.');
     return;
   }
 
   console.log(`🎯 ${leads.length} hot leads to contact today\n`);
-
-  const { writeWhatsAppMessage } = require('./whatsappWriter');
-  const { humanize } = require('./humanizer');
 
   let sent = 0;
   let failed = 0;
@@ -144,24 +67,46 @@ async function sendDailyWhatsApp() {
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
 
-    console.log(`\n📱 [${i + 1}/${leads.length}] Contacting: ${lead.business_name} (${lead.area})`);
+    console.log(`\n📱 [${i + 1}/${leads.length}] Contacting: ${lead.business_name}`);
 
-    // writeWhatsAppMessage now returns { message, variant }
-    const { message: rawMessage, variant } = await writeWhatsAppMessage(lead);
-    const finalMessage = await humanize(rawMessage);
-    const result = await sendWhatsApp(lead, finalMessage, variant);
+    const message = `Hi ${lead.business_name} 👋
 
-    if (result.success) {
+I noticed your restaurant doesn't have a strong online presence.
+I help restaurants in Bangalore get more customers from Google — without paying Zomato commission.
+
+I already did a free audit for your website. Can I share the results?
+
+— Nahid, Naisora`;
+
+    const success = await sendWhatsAppMessage(lead.phone, message);
+
+    if (success) {
       sent++;
+      await supabase.from('outreach_log').insert({
+        lead_id: lead.id,
+        channel: 'whatsapp',
+        message_type: 'cold',
+        message_text: message,
+        sent_at: new Date().toISOString(),
+        delivered: true
+      });
+
+      await supabase
+        .from('leads')
+        .update({
+          outreach_status: 'whatsapp_sent',
+          outreach_channel: 'whatsapp',
+          whatsapp_count: (lead.whatsapp_count || 0) + 1,
+          last_contacted_at: new Date().toISOString(),
+        })
+        .eq('id', lead.id);
     } else {
       failed++;
     }
 
-    // Delay between messages — skip after last one
-    if (i < leads.length - 1) {
-      const waitMin = Math.floor(Math.random() * 5 + 3);
-      console.log(`⏳ Waiting ${waitMin} minutes before next message...`);
-      await randomDelay();
+    if (sent + todayCount >= DAILY_LIMIT) {
+      console.log('🛑 Daily WhatsApp limit reached');
+      break;
     }
   }
 
@@ -177,54 +122,63 @@ async function sendDailyWhatsApp() {
   );
 }
 
-// Follow-up for leads that didn't reply (Day 3)
+// Follow-up for leads (Day 3)
 async function sendFollowUp() {
+  if (process.env.WHATSAPP_ENABLED !== 'true') return;
+
+  const todayCount = await getTodayCount();
+  const remaining = DAILY_LIMIT - todayCount;
+
+  if (remaining <= 0) {
+    console.log('🛑 Daily WhatsApp limit reached');
+    return;
+  }
+
   const threeDaysAgo = new Date();
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
   const { data: leads } = await supabase
     .from('leads')
     .select('*')
-    .eq('outreach_status', 'contacted')
-    .eq('outreach_channel', 'whatsapp')
+    .eq('outreach_status', 'whatsapp_sent')
     .lt('last_contacted_at', threeDaysAgo.toISOString())
-    .limit(15);
+    .limit(remaining);
 
   if (!leads || leads.length === 0) {
-    console.log('No follow-ups needed today.');
+    console.log('No WhatsApp follow-ups needed today.');
     return;
   }
-
-  const { writeFollowUpMessage } = require('./whatsappWriter');
-  const { humanize } = require('./humanizer');
 
   let sent = 0;
 
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
 
-    const rawMessage = await writeFollowUpMessage(lead);
-    const finalMessage = await humanize(rawMessage);
+    const message = `Hi ${lead.business_name} 👋, just following up on my previous message. Did you get a chance to see the free audit I did for your website?`;
 
-    await sendWhatsApp(lead, finalMessage);
+    const success = await sendWhatsAppMessage(lead.phone, message);
 
-    await supabase
-      .from('leads')
-      .update({
-        outreach_status: 'followup_1',
-        last_contacted_at: new Date().toISOString(),
-      })
-      .eq('id', lead.id);
+    if (success) {
+      sent++;
+      await supabase
+        .from('leads')
+        .update({
+          outreach_status: 'followup_1',
+          last_contacted_at: new Date().toISOString(),
+        })
+        .eq('id', lead.id);
+    }
 
-    sent++;
-
-    if (i < leads.length - 1) {
-      await delay(Math.random() * 300000 + 180000);
+    if (sent + todayCount >= DAILY_LIMIT) {
+      console.log('🛑 Daily WhatsApp limit reached');
+      break;
     }
   }
 
   console.log(`✅ Follow-ups sent: ${sent}`);
-  await sendMessage(`🔄 Follow-ups sent: ${sent} WhatsApp messages`);
+  if (sent > 0) {
+    await sendMessage(`🔄 Follow-ups sent: ${sent} WhatsApp messages`);
+  }
 }
 
-module.exports = { sendDailyWhatsApp, sendWhatsApp, sendFollowUp };
+module.exports = { sendDailyWhatsApp, sendFollowUp };

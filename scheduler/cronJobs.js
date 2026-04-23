@@ -82,11 +82,11 @@ function startAllJobs() {
   }));
   console.log('✅ Every 3h — Check WhatsApp Replies');
 
-  // 5. FOLLOW-UP ENGINE — 2:00 PM
-  cron.schedule('0 14 * * *', safeJob('WhatsApp Follow-up', async () => {
-    await sendFollowUp();
+  // 5. WHATSAPP OUTREACH — 2:00 PM
+  cron.schedule('0 14 * * *', safeJob('WhatsApp Outreach', async () => {
+    await sendDailyWhatsApp();
   }));
-  console.log('✅ 02:00 PM — WhatsApp Follow-ups');
+  console.log('✅ 02:00 PM — WhatsApp Outreach (Cold Batch 2)');
 
   // 6. SCRAPER & AUDIT — 4:00 PM (Find new leads for tomorrow)
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {

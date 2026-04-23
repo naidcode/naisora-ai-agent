@@ -17,4 +17,11 @@ async function validateContentIdeas(ideas) {
   return validated;
 }
 
-module.exports = { validateContentIdeas };
+function validateIdea(idea) {
+  let score = 0;
+  if (idea.source) score += 30;
+  if (idea.engagement_score) score += idea.engagement_score * 0.7;
+  return Math.min(Math.round(score), 100);
+}
+
+module.exports = { validateContentIdeas, validateIdea };

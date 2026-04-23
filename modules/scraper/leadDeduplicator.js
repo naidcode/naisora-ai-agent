@@ -68,7 +68,7 @@ function nameSimilarity(a, b) {
 async function fetchExistingLeads() {
   const { data, error } = await supabase
     .from("leads")
-    .select("id, place_id, business_name, phone, area, outreach_status, lead_category")
+    .select("id, business_name, phone, area, outreach_status, lead_category")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -82,16 +82,6 @@ async function fetchExistingLeads() {
 // ─── Check a single lead against existing leads ───────────────────────────────
 function checkDuplicate(newLead, existingLeads) {
   for (const existing of existingLeads) {
-    // ── Layer 0: Exact place_id match (Unique Google identifier) ──
-    if (newLead.place_id && existing.place_id && newLead.place_id === existing.place_id) {
-      return {
-        isDuplicate: true,
-        reason: "place_id",
-        matchedId: existing.id,
-        existingStatus: existing.outreach_status,
-        label: `ID match: ${existing.place_id}`,
-      };
-    }
 
     // Layer 1: Exact phone match (strongest signal)
     if (newLead.phone && existing.phone && newLead.phone === existing.phone) {

@@ -107,7 +107,7 @@ function scoreLead(lead) {
     reasons.push("Cafe focus");
   }
 
-  return score;
+  return Math.min(score, 100);
 }
 
 // ─── Categorise based on score ────────────────────────────────────────────────
@@ -361,4 +361,5 @@ module.exports = {
   getHotLeads,
   getLeadsByArea,
   scoreLead,
+  categorizeLead,
 };
