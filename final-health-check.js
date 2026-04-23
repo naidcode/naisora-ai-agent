@@ -145,8 +145,13 @@ async function runHealthCheck() {
 
     // 10. WhatsApp Baileys
     try {
-        require('./modules/outreach/whatsappSender');
-    } catch (e) { report.whatsapp = `❌ WhatsApp Module Load Failed: ${e.message}`; }
+        const waPath = path.join(__dirname, 'auth_info_baileys', 'creds.json');
+        if (fs.existsSync(waPath)) {
+            report.whatsapp = '✅ WhatsApp — Session connected (creds.json found)';
+        } else {
+            report.whatsapp = '⚠️ WhatsApp — Module ready, but session missing (SIM pending / Scan QR required)';
+        }
+    } catch (e) { report.whatsapp = `❌ WhatsApp Module Check Failed: ${e.message}`; }
 
     // 11. Content Pipeline
     try {

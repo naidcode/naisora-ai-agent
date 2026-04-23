@@ -5,6 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "health": "node final-health-check.js",
+    "whatsapp": "node whatsapp-service.js",
+    "autopilot": "node -e \"require('./system/autoPilot').startAutoPilot()\"",
     "agent:stop": "node scripts/stop.js",
     "agent:start": "node scripts/start.js",
     "test-email": "node -e \"require('./modules/email/emailSender').testSend()\"",
