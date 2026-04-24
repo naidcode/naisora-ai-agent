@@ -36,59 +36,74 @@ const GUARANTEES = {
 };
 
 async function writeEmail(lead) {
-  const seoScore = lead.seo_score || Math.floor(Math.random() * 30) + 25;
-  const area = lead.address?.split(',').slice(-2, -1)[0]?.trim() || 'Bangalore';
+  const priority = lead.priority || (lead.has_website ? 2 : 1);
+  const area = lead.area || 'Bangalore';
+  const businessName = lead.business_name;
+  const pagespeedScore = lead.pagespeed_score || 45; // Default if not found
+  const xIssues = lead.issues_found || 5; // Default if not found
 
-  const prompt = `You are writing a cold email for Naisora, a premium web design agency in Bangalore. We specialize in building professional digital storefronts for restaurants and cafes.
-  
-  CURRENT STRATEGY:
-  - We only target restaurants who either DON'T have a website or have an OLD/POOR design.
-  - We provide professional web design and Local SEO (we do NOT guarantee customers, only visibility and a professional look).
-  - We do not have case studies on our own site yet, so do not promise specific "more customer" results.
-  
-  STRICT RULES:
-  - Never use words: "backlinks", "ranking algorithm", "optimization"
-  - Focus instead: "professional look", "matching your food quality", "showing up on Google when people search nearby", "professional online storefront"
-  - Never guarantee "more orders" or "more customers". Guarantee a "professional image" and "local visibility".
-  - Email must be under 150 words total
-  - Must feel personal, not templated
-  - Subject line must create curiosity or urgency regarding their design or presence
-  
-  RESTAURANT DETAILS:
-  Name: ${lead.business_name}
-  Area: ${area}
-  Phone: ${lead.phone || 'N/A'}
-  Website: ${lead.website || 'No website found'}
-  Digital Presence Score: ${seoScore}/100
-  Category: ${lead.category || 'Restaurant'}
-  
-  Write the email in this format:
-  
-  SUBJECT: [Subject line — under 8 words]
-  
-  BODY:
-  [Email body — personal, design-focused, under 150 words]
-  
-  The email should:
-  1. Open with a specific observation about their restaurant (e.g. "I love the vibe of your cafe from the photos")
-  2. Mention the ${seoScore}/100 score and how it relates to their missing or outdated digital storefront
-  3. Explain that people in ${area} are searching for places like theirs but can't find a professional site/menu
-  4. Offer to build them a professional website that matches the quality of their food
-  5. Close with: "Can I send you a free concept design/audit for ${lead.business_name}?"
-  6. Sign off as: Nahid | Naisora | hey@naisora.com`;
+  let subject = "";
+  let body = "";
 
-  const emailText = await askClaudeSonnet(prompt);
+  if (priority === 1) {
+    // Priority 1 — No Website
+    subject = `${businessName} is losing customers to competitors right now`;
+    body = `Hi ${businessName} team,
 
-  // Parse subject and body
-  const subjectMatch = emailText.match(/SUBJECT:\s*(.+)/);
-  const bodyMatch = emailText.match(/BODY:\s*([\s\S]+)/);
+I searched for your restaurant on Google and couldn't find a website for you.
+
+Every day customers search "restaurants in ${area}" on Google and find your competitors instead of you — because they have websites and you don't.
+
+I build websites for restaurants in Bangalore that:
+✅ Show up on Google searches
+✅ Take online orders directly (no Zomato commission)
+✅ Show your menu, photos, and location
+
+I already researched your restaurant and prepared a free growth plan. Can I share it with you?
+
+— Nahid, Naisora
+naisora.com`;
+  } else if (priority === 2) {
+    // Priority 2 — Old/Bad Website
+    subject = `Your website is costing you customers, ${businessName}`;
+    body = `Hi ${businessName} team,
+
+I checked your website and ran a free audit on it.
+It scored ${pagespeedScore}/100 on Google's speed test.
+
+This means:
+❌ Customers leave before it loads
+❌ Google ranks you lower than competitors
+❌ It's not working on mobile phones
+
+I redesign restaurant websites in Bangalore that load fast, look great on mobile, and rank higher on Google.
+
+I've already prepared a free audit report for your site. Want me to send it over?
+
+— Nahid, Naisora
+naisora.com`;
+  } else {
+    // Priority 3 — Weak SEO
+    subject = `Your competitors are showing up before you on Google, ${businessName}`;
+    body = `Hi ${businessName} team,
+
+I searched "restaurants in ${area}" on Google.
+Your competitors are showing up before you.
+
+I checked your website's SEO score — there are ${xIssues} things holding you back from ranking higher.
+
+I help restaurants in Bangalore get to the top of Google searches — more visibility means more customers without paying Zomato commission.
+
+I prepared a free SEO audit for your website. Want me to share it?
+
+— Nahid, Naisora
+naisora.com`;
+  }
 
   return {
-    subject: subjectMatch ? subjectMatch[1].trim() : `Quick question about ${lead.business_name}'s website`,
-    body: bodyMatch ? bodyMatch[1].trim() : emailText,
-    lead_id: lead.id,
-    seo_score: seoScore,
-    area: area
+    subject,
+    body,
+    lead_id: lead.id
   };
 }
 

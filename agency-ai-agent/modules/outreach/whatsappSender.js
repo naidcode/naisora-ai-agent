@@ -71,14 +71,44 @@ async function sendDailyWhatsApp() {
 
     console.log(`\n📱 [${i + 1}/${leads.length}] Queuing: ${lead.business_name}`);
 
-    const message = `Hi ${lead.business_name} 👋
-    
-I noticed your restaurant doesn't have a strong online presence. 
-I help restaurants in Bangalore get more customers from Google — without paying Zomato commission.
+    let message = "";
+    const priority = lead.priority || (lead.has_website ? 2 : 1);
+    const area = lead.area || 'Bangalore';
+    const pagespeedScore = lead.pagespeed_score || 45;
+    const xIssues = lead.issues_found || 5;
 
-I already did a free audit for your website. Can I share the results?
+    if (priority === 1) {
+      message = `Hi ${lead.business_name} 👋
+
+I searched for you on Google — you don't have a website yet.
+You're losing customers daily to restaurants that do.
+
+I build websites for Bangalore restaurants that get found on Google and take direct orders — no Zomato commission.
+
+I made a free growth plan for you. Want me to share it?
 
 — Nahid, Naisora`;
+    } else if (priority === 2) {
+      message = `Hi ${lead.business_name} 👋
+
+I ran a free audit on your website — it scored ${pagespeedScore}/100 on Google's speed test.
+
+That means slow loading, poor mobile experience, and lower Google ranking.
+
+I fix this for Bangalore restaurants. Want me to send your free audit report?
+
+— Nahid, Naisora`;
+    } else {
+      message = `Hi ${lead.business_name} 👋
+
+Your competitors are showing up before you on Google for "${area} restaurants".
+
+I found ${xIssues} SEO issues on your website holding you back.
+
+I help Bangalore restaurants rank higher on Google. Want your free SEO audit?
+
+— Nahid, Naisora`;
+    }
 
     // INSERT into whatsapp_queue instead of sending directly
     const { error } = await supabase.from('whatsapp_queue').insert({

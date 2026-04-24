@@ -31,6 +31,7 @@ if (fs.existsSync('.env')) {
 
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
+const { getQuickScore } = require('../seo/pagespeedAudit');
 
 // ─── Indian phone number normaliser ──────────────────────────────────────────
 function normalisePhone(raw) {
@@ -59,55 +60,43 @@ function normalisePhone(raw) {
 }
 
 // ─── Score a single lead ──────────────────────────────────────────────────────
-function scoreLead(lead) {
+async function scoreLead(lead) {
   let score = 0;
+  let category = "cold";
   const reasons = [];
 
-  // No website — our PRIMARY target
+  // Priority 1 — No Website (Hottest leads)
   if (!lead.has_website) {
-    score += 50;
-    reasons.push("No website (foundational need)");
+    score = 95; // 90-100 range
+    category = "hot";
+    reasons.push("No website (Priority 1)");
+    return { score, category, reasons, priority: 1 };
+  }
+
+  // Priority 2 & 3 — Bad or Weak Website
+  const speedScore = await getQuickScore(lead.website);
+  
+  if (speedScore === null) {
+    // If PageSpeed fails, default to warm/low score
+    return { score: 40, category: "warm", reasons: ["Website exists, speed check failed"], priority: 3 };
+  }
+
+  if (speedScore < 50) {
+    // Priority 2 — Old/Bad Website
+    score = 80; // 70-89 range
+    category = "hot";
+    reasons.push(`Bad Website (Priority 2, Score: ${speedScore})`);
+    return { score, category, reasons, priority: 2 };
+  } else if (speedScore >= 50 && speedScore <= 70) {
+    // Priority 3 — Weak SEO Website
+    score = 60; // 50-69 range
+    category = "warm";
+    reasons.push(`Weak SEO Website (Priority 3, Score: ${speedScore})`);
+    return { score, category, reasons, priority: 3 };
   } else {
-    // If they HAVE a website, we only care if it's likely a "bad design"
-    // We proxy this with low ratings/reviews or if it's a very old business
-    score += 10; 
-    reasons.push("Redesign candidate");
+    // Skip this lead entirely — not worth pursuing
+    return { score: 0, category: "skip", reasons: [`Good website (${speedScore}) — skipping`], priority: 0 };
   }
-
-  // Has phone — we can WhatsApp them (CRITICAL)
-  if (lead.phone) {
-    score += 20;
-    reasons.push("Phone available");
-  }
-
-  // Rating-based scoring (proxy for poor digital management/design)
-  const rating = parseFloat(lead.rating) || 0;
-  if (rating > 0 && rating < 3.8) {
-    score += 15;
-    reasons.push("Low rating (suggests poor online image)");
-  }
-
-  // Review count — low means low visibility
-  const reviews = parseInt(lead.review_count) || 0;
-  if (reviews < 50) {
-    score += 15;
-    reasons.push("Low local visibility");
-  }
-
-  // GBP not verified — easy win for local SEO
-  if (!lead.gbp_verified) {
-    score += 10;
-    reasons.push("GBP not verified");
-  }
-
-  // Cafes/Coffee Shops close faster
-  const category = (lead.category || "").toLowerCase();
-  if (category.includes("cafe") || category.includes("coffee")) {
-    score += 5;
-    reasons.push("Cafe focus");
-  }
-
-  return Math.min(score, 100);
 }
 
 // ─── Categorise based on score ────────────────────────────────────────────────
@@ -135,7 +124,7 @@ function validateLead(raw) {
 }
 
 // ─── Process a single lead ────────────────────────────────────────────────────
-function processLead(raw) {
+async function processLead(raw) {
   // Validate
   const errors = validateLead(raw);
   if (errors.length > 0) {
@@ -146,7 +135,11 @@ function processLead(raw) {
   const normalisedPhone = normalisePhone(raw.phone);
 
   // Score
-  const score = scoreLead({ ...raw, phone: normalisedPhone });
+  const { score, category, reasons, priority } = await scoreLead({ ...raw, phone: normalisedPhone });
+
+  if (category === "skip") {
+    return { valid: false, errors: ["High quality website — skipped"], lead: null };
+  }
 
   // Build processed lead object
   const processed = {
@@ -169,8 +162,9 @@ function processLead(raw) {
 
     // Scoring
     lead_score: score,
-    lead_category: categorizeLead(score),
-    score_reasons: [],
+    lead_category: category,
+    score_reasons: reasons,
+    priority: priority,
 
     // Pipeline status
     outreach_status: "new", // new → contacted → replied → closed → lost
@@ -239,7 +233,7 @@ async function processLeads(rawLeads, saveToDb = true) {
   const stats = { hot: 0, warm: 0, cold: 0, noWebsite: 0, withPhone: 0 };
 
   for (const raw of rawLeads) {
-    const result = processLead(raw);
+    const result = await processLead(raw);
 
     if (!result.valid) {
       invalid.push({ name: raw.name, errors: result.errors });

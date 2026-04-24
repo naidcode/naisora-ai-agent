@@ -11,6 +11,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import { handleIncomingWhatsApp } from './modules/outreach/whatsappAutoReply.js';
 
 dotenv.config();
 
@@ -59,6 +60,24 @@ async function connectWhatsApp() {
   });
 
   sock.ev.on('creds.update', saveCreds);
+
+  // --- Handle Incoming Messages (Auto-Reply) ---
+  sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type === 'notify') {
+      for (const msg of messages) {
+        if (!msg.key.fromMe && msg.message) {
+          const from = msg.key.remoteJid;
+          const text = msg.message.conversation || 
+                       msg.message.extendedTextMessage?.text || 
+                       msg.message.imageMessage?.caption || "";
+          
+          if (text) {
+            await handleIncomingWhatsApp(sock, from, text);
+          }
+        }
+      }
+    }
+  });
 }
 
 // Global flag to prevent multiple processor instances
