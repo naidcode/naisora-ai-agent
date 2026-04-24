@@ -6,94 +6,88 @@ const { sendMessage: sendTelegram } = require('../../config/telegram');
 // Initialize Supabase (re-init because this might run in a separate context or need its own instance)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
-const INTENT_SYSTEM_PROMPT = `You are an AI assistant for Naisora, a Bangalore-based web design agency.
-Your task is to detect the intent of a restaurant owner replying to our cold WhatsApp message.
+const AUTO_REPLY_SYSTEM_PROMPT = `You are Nahid from Naisora, a web design agency in Bangalore that helps restaurants get more customers from Google. You are replying to a restaurant owner on WhatsApp who responded to your cold outreach message.
 
-CATEGORIES:
-1. "interested" — User wants to see the audit, growth plan, or says yes/sure/okay/send it.
-2. "question" — User asks "who are you?", "what is the price?", "how much?", or "what is this?".
-3. "not_interested" — User says no, stop, remove me, not interested, or is rude.
-4. "unknown" — Anything else that doesn't fit the above.
+Your goal is to:
+- Be friendly, confident and professional
+- Understand what they are asking or saying
+- Move them towards booking a free 10 minute call
+- Never be pushy or salesy
+- Keep replies short — max 4-5 lines
+- Use simple English with a natural Indian tone
+- Always end with a question to keep conversation going
 
-Respond with ONLY the category name in lowercase.`;
+Business details:
+- Website package: starting ₹8,000 one time
+- SEO package: starting ₹3,000/month
+- Guarantee: results in 30 days or money back
+- Contact: hey@naisora.com
+- Website: naisora.com
+
+Detect the intent of the message:
+- "not_interested": if they say no, stop, remove me, or don't want to talk.
+- "interested": if they say yes, send it, okay, or show interest.
+- "question": if they ask about price, service, or who you are.
+- "unknown": for anything else.
+
+Response format: Return a JSON object with two fields: "intent" and "reply".
+Example: {"intent": "interested", "reply": "Glad to hear that! I can send over the audit right away. Would you be free for a quick 10 min call tomorrow to discuss how we can improve your Google ranking?"}`;
 
 async function handleIncomingWhatsApp(sock, from, text) {
   try {
     const phone = from.split('@')[0];
     console.log(`🤖 Processing incoming WhatsApp from ${phone}: "${text}"`);
 
-    // 1. Detect Intent
-    const intent = await askClaudeWithSystem(INTENT_SYSTEM_PROMPT, text);
+    // 1. Generate Dynamic Reply and Detect Intent
+    const response = await askClaudeWithSystem(AUTO_REPLY_SYSTEM_PROMPT, `Lead message: "${text}"`);
+    
+    let result;
+    try {
+      result = JSON.parse(response);
+    } catch (e) {
+      console.log('⚠️ Failed to parse Claude JSON, using fallback parsing');
+      const intentMatch = response.match(/"intent":\s*"([^"]+)"/);
+      const replyMatch = response.match(/"reply":\s*"([^"]+)"/);
+      result = {
+        intent: intentMatch ? intentMatch[1] : 'unknown',
+        reply: replyMatch ? replyMatch[1] : response
+      };
+    }
+
+    const { intent, reply } = result;
     console.log(`🎯 Detected intent: ${intent}`);
+    console.log(`✍️  Generated reply: ${reply}`);
 
-    let autoReply = "";
-
-    if (intent === 'interested') {
-      autoReply = `Great! 😊
-
-Here's what I found in your free audit:
-
-🔴 Slow mobile loading (hurting your ranking)
-🔴 Missing Google Search optimization
-🔴 Design doesn't match your food quality
-
-I can fix all of this and get you more customers from Google within 30 days — guaranteed.
-
-Can we get on a quick 10 minute call this week?
-
-— Nahid, Naisora`;
-    } else if (intent === 'question') {
-      autoReply = `Great question! 😊
-
-I'm Nahid from Naisora — we build websites and do SEO for restaurants in Bangalore.
-
-Our packages start from ₹8,000 one time for a full website.
-SEO starts from ₹3,000/month.
-
-But first let me show you your free audit — no commitment needed.
-
-Want me to send it over?
-
-— Nahid, Naisora`;
-    } else if (intent === 'not_interested') {
-      autoReply = `No problem at all! 🙏
-I won't message you again.
-If you ever need help with your online presence, we're here.
-
-— Nahid, Naisora`;
-
-      // Mark lead as opted out
+    // 2. Handle Opt-Outs
+    if (intent === 'not_interested') {
+      console.log(`🚫 Marking ${phone} as opted_out`);
       await supabase
         .from('leads')
         .update({ outreach_status: 'opted_out' })
-        .eq('phone', `+${phone}`); // Assuming phone in DB has + prefix
-    } else {
-      autoReply = `Thanks for your reply! 😊 Just checking if you wanted me to send over that free growth plan/audit I prepared for your restaurant?
-
-— Nahid, Naisora`;
+        .eq('phone', `+${phone}`);
     }
 
-    // 2. Send Auto-Reply
-    if (autoReply) {
-      await sock.sendMessage(from, { text: autoReply });
-      console.log(`📤 Sent auto-reply for intent: ${intent}`);
+    // 3. Send Auto-Reply
+    if (reply) {
+      await sock.sendMessage(from, { text: reply });
+      console.log(`📤 Sent auto-reply to ${phone}`);
     }
 
-    // 3. Save to Supabase
+    // 4. Save to Supabase
     await supabase.from('whatsapp_replies').insert({
       phone: phone,
       message: text,
       intent: intent,
-      auto_reply_sent: autoReply || 'none'
+      auto_reply_sent: reply || 'none'
     });
 
-    // 4. Send Telegram Alert
+    // 5. Send Telegram Alert
     const telegramMsg = `
 📱 <b>WhatsApp Reply Received!</b>
 From: <code>${phone}</code>
 Message: "${text}"
 Intent: <b>${intent}</b>
-Auto-reply: ${autoReply ? '✅ Sent' : '❌ Not sent'}
+Auto-reply: <i>${reply}</i>
     `.trim();
 
     await sendTelegram(telegramMsg);
