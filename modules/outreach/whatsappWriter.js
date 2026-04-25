@@ -1,4 +1,4 @@
-const { askClaude } = require('../../config/claude');
+const { askClaude, askClaudeSonnet } = require('../../config/claude');
 const { supabase } = require('../../config/database');
 
 // ─── Write cold WhatsApp message (Lead Type Aware) ───────────────────────────
@@ -56,6 +56,9 @@ function buildFallbackMessage(lead) {
   return `Hi, I was looking at ${lead.business_name} online and noticed your site design doesn't quite match the quality of your food. I help Bangalore restaurants upgrade to professional, modern websites that show up better on Google Maps. Would you like a free 2-min design audit? — Nahid, Naisora`;
 }
 
+// ─── WhatsApp System Prompt ──────────────────────────────────────────────────
+const WHATSAPP_SYSTEM = `You are Nahid from Naisora, a web design agency in Bangalore. You are following up with a restaurant owner on WhatsApp. Tone: Friendly, casual, helpful, natural Indian English.`;
+
 // ─── Write follow-up WhatsApp (Day 3) ────────────────────────────────────────
 async function writeFollowUpMessage(lead) {
   const prompt = `Write a short WhatsApp follow-up message for a restaurant owner who didn't reply to our first message 3 days ago.
@@ -73,4 +76,4 @@ Keep it very short — 2 sentences max. Casual. Remind them about the free desig
   }
 }
 
-module.exports = { writeWhatsAppMessage, writeFollowUpMessage, getActiveVariant };
+module.exports = { writeWhatsAppMessage, writeFollowUpMessage };
