@@ -265,15 +265,23 @@ async function deduplicateLeads(processedLeads) {
   console.log(`   📵 Unreachable skip : ${summary.unreachable_skipped}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
+  const today = new Date().toLocaleDateString();
+  const areas = [...new Set(processedLeads.map(l => l.area))];
+  const noWebsite = processedLeads.filter(l => l.lead_type === 'no_website').length;
+  const badWebsite = processedLeads.filter(l => l.lead_type === 'bad_website').length;
+  const weakSeo = processedLeads.filter(l => l.lead_type === 'weak_seo').length;
+  const skipped = processedLeads.filter(l => l.lead_type === 'skip').length;
+
   await sendTelegramAlert(
-    `🔍 *Deduplication Complete*\n\n` +
-      `Checked: ${summary.total_checked}\n` +
-      `✅ New leads ready: *${summary.new_leads}*\n` +
-      `🔁 Auto Follow-ups: *${summary.follow_up_leads}*\n` +
-      `🔥 Hot (WhatsApp now): *${hotNew}*\n` +
-      `🌡️ Warm: ${warmNew}\n` +
-      `⏭️ Skipped (dupes): ${summary.duplicates_skipped}\n` +
-      `📵 Unreachable: ${summary.unreachable_skipped}`,
+    `🗺️ *Scraper Report — ${today}*\n\n` +
+    `📍 *Areas scraped:* ${areas.join(", ") || 'N/A'}\n` +
+    `📊 *Total found:* ${summary.total_checked}\n` +
+    `🔴 *No website:* ${noWebsite}\n` +
+    `🟡 *Bad website:* ${badWebsite}\n` +
+    `🟢 *Weak SEO:* ${weakSeo}\n` +
+    `⛔ *Skipped (good website):* ${skipped}\n` +
+    `💾 *Saved to DB:* ${summary.new_leads}\n` +
+    `🔁 *Duplicates skipped:* ${summary.duplicates_skipped}`
   );
 
   return {

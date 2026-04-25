@@ -120,120 +120,73 @@ async function searchProfiles(page, query, limit = 8) {
 
     cards.forEach(card => {
       const nameEl = card.querySelector('.entity-result__title-text a');
-      const titleEl = card.querySelector('.entity-result__primary-subtitle');
-      const locationEl = card.querySelector('.entity-result__secondary-subtitle');
-      const profileUrl = nameEl?.getAttribute('href');
+const { askClaude } = require('../../config/claude');
 
-      const name = nameEl?.textContent?.trim();
-      const title = titleEl?.textContent?.trim();
-      const location = locationEl?.textContent?.trim();
-
-      if (name && profileUrl && location?.toLowerCase().includes('bangalore')) {
-        results.push({ name, title, location, profileUrl });
-      }
-    });
-
-    return results;
-  });
-
-  return profiles.slice(0, limit);
-}
-
-// ─── Write LinkedIn connection note ──────────────────────────────────────────
-async function writeConnectionNote(profile) {
-  const prompt = `Write a LinkedIn connection request note (MAX 200 characters) for:
-
-Name: ${profile.name}
-Title: ${profile.title}
-Location: ${profile.location}
-
-The note should feel like a genuine professional reaching out, not a sales pitch. Short, specific, curious.`;
-
+// ─── Send LinkedIn message to a single account ────────────────────────────────
+async function sendLinkedInMessage(page, profileUrl, message, leadId = null) {
   try {
-    const raw = await askClaudeSonnet(prompt, LINKEDIN_SYSTEM, 100);
-    const humanized = await humanizeForChannel(raw, 'linkedin');
-    // Enforce 200 char limit
-    return humanized.substring(0, 197) + (humanized.length > 197 ? '...' : '');
-  } catch (err) {
-    return `Hi ${profile.name.split(' ')[0]}, I help Bangalore restaurant teams reduce delivery app dependency. Would love to connect!`;
-  }
-}
+    await page.goto(profileUrl, { waitUntil: 'networkidle2' });
+    await randomDelay(3000, 5000);
 
-// ─── Write LinkedIn direct message ───────────────────────────────────────────
-async function writeLinkedInMessage(profile) {
-  const prompt = `Write a LinkedIn direct message for:
+    // Try to find Message button (for already connected or premium)
+    let messageBtn = await page.$('button[aria-label^="Message"]') ||
+                     await page.$('button.pvs-profile-actions__action.artdeco-button--primary');
 
-Name: ${profile.name}
-Title: ${profile.title || 'F&B Manager'}
-Location: ${profile.location || 'Bangalore'}
-
-They manage a restaurant chain or F&B operation. We help restaurant chains get more direct orders, build their own website system, and reduce Zomato/Swiggy commission dependency.
-
-Keep it 3-4 sentences. One clear question at the end.`;
-
-  try {
-    const raw = await askClaudeSonnet(prompt, LINKEDIN_SYSTEM, 200);
-    return await humanizeForChannel(raw, 'linkedin');
-  } catch (err) {
-    return `Hi ${profile.name.split(' ')[0]}, I work with Bangalore restaurant chains to help them get more direct orders and reduce delivery app commission costs. I noticed you're in F&B operations — is reducing third-party platform dependency something your team is focused on right now?`;
-  }
-}
-
-// ─── Send connection request ──────────────────────────────────────────────────
-async function sendConnectionRequest(page, profile, note) {
-  try {
-    await page.goto(profile.profileUrl, { waitUntil: 'networkidle2' });
-    await randomDelay(2000, 3000);
-
-    // Find Connect button
-    const connectBtn = await page.$('button[aria-label*="Connect"]') ||
-                       await page.$('button:-soup-contains("Connect")');
-
-    if (!connectBtn) {
-      // Already connected or following
-      console.log(`   ⏭️  Already connected with ${profile.name}`);
-      return false;
-    }
-
-    await connectBtn.click();
-    await randomDelay(1500, 2500);
-
-    // Click "Add a note"
-    const addNoteBtn = await page.$('button[aria-label="Add a note"]');
-    if (addNoteBtn) {
-      await addNoteBtn.click();
-      await randomDelay(1000, 1500);
-
-      const noteInput = await page.$('textarea[name="message"]');
-      if (noteInput) {
-        await noteInput.type(note, { delay: 60 });
-        await randomDelay(500, 1000);
-      }
-    }
-
-    // Send
-    const sendBtn = await page.$('button[aria-label="Send now"]') ||
-                    await page.$('button:-soup-contains("Send")');
-    if (sendBtn) {
-      await sendBtn.click();
+    if (messageBtn) {
+      await messageBtn.click();
       await randomDelay(2000, 3000);
+
+      // Type and send
+      const inputArea = await page.$('div[role="textbox"]') || await page.$('.msg-form__contenteditable');
+      if (inputArea) {
+        await inputArea.click();
+        await inputArea.type(message, { delay: 60 });
+        await randomDelay(1000, 2000);
+        
+        const sendBtn = await page.$('button.msg-form__send-button');
+        if (sendBtn) await sendBtn.click();
+        
+        await randomDelay(1500, 2500);
+        console.log(`   ✅ Direct message sent via profile`);
+        return true;
+      }
     }
 
-    // Log to Supabase
-    await supabase.from('outreach_log').insert({
-      channel: 'linkedin',
-      message_type: 'connection_request',
-      message_text: note,
-      sent_at: new Date().toISOString(),
-      delivered: true,
-      reply_text: profile.name + ' — ' + profile.title,
-    });
+    // If no message button, try Connection Request with Note
+    const connectBtn = await page.$('button[aria-label^="Connect"]') ||
+                       await page.$('button.pvs-profile-actions__action:-soup-contains("Connect")');
 
-    console.log(`   ✅ Connection request sent to ${profile.name}`);
-    return true;
+    if (connectBtn) {
+      await connectBtn.click();
+      await randomDelay(1500, 2500);
+
+      const addNoteBtn = await page.$('button[aria-label="Add a note"]');
+      if (addNoteBtn) {
+        await addNoteBtn.click();
+        await randomDelay(1000, 1500);
+
+        const noteInput = await page.$('textarea[name="message"]');
+        if (noteInput) {
+          // LinkedIn connection note limit is 200 chars. If message > 200, truncate it.
+          const note = message.length > 200 ? message.substring(0, 197) + '...' : message;
+          await noteInput.type(note, { delay: 60 });
+          await randomDelay(500, 1000);
+          
+          const sendBtn = await page.$('button[aria-label="Send now"]');
+          if (sendBtn) await sendBtn.click();
+          
+          await randomDelay(2000, 3000);
+          console.log(`   ✅ Connection request with note sent`);
+          return true;
+        }
+      }
+    }
+
+    console.log(`   ⚠️ Could not find Message or Connect button for this profile.`);
+    return false;
 
   } catch (err) {
-    console.error(`   ❌ Failed connection to ${profile.name}: ${err.message}`);
+    console.error(`   ❌ Failed to message/connect: ${err.message}`);
     return false;
   }
 }
@@ -249,58 +202,128 @@ async function runLinkedInOutreach() {
     return;
   }
 
+  // 1. Fetch warm leads that have LinkedIn URLs and haven't been messaged
+  const { data: leads, error } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('lead_category', 'warm')
+    .not('linkedin_url', 'is', null)
+    .eq('linkedin_sent', false)
+    .limit(10); 
+
+  if (error) {
+    console.error('Error fetching leads:', error.message);
+    return;
+  }
+
+  if (!leads || leads.length === 0) {
+    console.log('📭 No warm leads with LinkedIn URLs found.');
+    return;
+  }
+
+  console.log(`🎯 Found ${leads.length} warm leads for LinkedIn outreach`);
+
   const browser = await launchBrowser();
   const page = await browser.newPage();
-
+  await page.setViewport({ width: 1280, height: 800 });
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
-  let connectionsSent = 0;
+  let sent = 0;
+  let skipped = 0;
+  const messagedLeads = [];
 
   try {
-    await loginLinkedIn(page);
-    await randomDelay(3000, 5000);
+    const loggedIn = await loginLinkedIn(page);
+    if (!loggedIn) {
+      console.log('❌ LinkedIn login failed.');
+      return;
+    }
 
-    for (const searchQuery of TARGET_SEARCHES) {
-      if (connectionsSent >= DAILY_CONNECTION_LIMIT) break;
+    for (const lead of leads) {
+      if (sent >= 10) break;
 
-      console.log(`\n🔍 Searching: "${searchQuery}"`);
-      const profiles = await searchProfiles(page, searchQuery, 6);
-      console.log(`   Found ${profiles.length} Bangalore profiles`);
+      const profileUrl = lead.linkedin_url;
+      const area = lead.area || 'Bangalore';
+      const leadType = lead.lead_type || 'unknown';
+      const pagespeedScore = lead.pagespeed_score || 0;
 
-      for (const profile of profiles) {
-        if (connectionsSent >= DAILY_CONNECTION_LIMIT) break;
+      console.log(`\n👤 Preparing message for ${lead.business_name}...`);
 
-        console.log(`\n👤 ${profile.name} — ${profile.title}`);
+      let prompt = '';
+      if (leadType === 'no_website') {
+        prompt = `Write a short LinkedIn message to the owner of ${lead.business_name} restaurant in ${area} Bangalore.
+They have no website.
+Pain point: missing online visibility.
+Offer: free website growth plan.
+Tone: professional but warm. LinkedIn style.
+Sign as Nahid, Founder at Naisora.
+Max 60 words.`;
+      } else if (leadType === 'bad_website') {
+        prompt = `Write a short LinkedIn message to the owner of ${lead.business_name} restaurant in ${area} Bangalore.
+Their website scored ${pagespeedScore}/100 on Google PageSpeed.
+Pain point: slow website hurting their business online.
+Offer: free website audit report.
+Tone: professional but warm. LinkedIn style.
+Sign as Nahid, Founder at Naisora.
+Max 60 words.`;
+      } else if (leadType === 'weak_seo') {
+        prompt = `Write a short LinkedIn message to the owner of ${lead.business_name} restaurant in ${area} Bangalore.
+Their competitors rank above them on Google.
+Pain point: losing potential customers to better ranked competitors.
+Offer: free SEO audit.
+Tone: professional but warm. LinkedIn style.
+Sign as Nahid, Founder at Naisora.
+Max 60 words.`;
+      } else {
+        console.log(`   ⏭️  Unknown lead type — skipping`);
+        skipped++;
+        continue;
+      }
 
-        const note = await writeConnectionNote(profile);
-        const success = await sendConnectionRequest(page, profile, note);
+      const message = await askClaude(prompt);
+      const success = await sendLinkedInMessage(page, profileUrl, message.trim(), lead.id);
 
-        if (success) {
-          connectionsSent++;
-          // 8-15 minute delay between connection requests
-          const waitMin = Math.floor(Math.random() * 7 + 8);
-          console.log(`   ⏳ Waiting ${waitMin} minutes...`);
-          await randomDelay(waitMin * 60000, (waitMin + 3) * 60000);
+      if (success) {
+        sent++;
+        messagedLeads.push(lead);
+        
+        // Update lead status
+        await supabase
+          .from('leads')
+          .update({ linkedin_sent: true, last_contacted_at: new Date().toISOString() })
+          .eq('id', lead.id);
+
+        // Random delay 3-7 minutes between each message as requested
+        if (sent < leads.length && sent < 10) {
+          const waitMs = Math.floor(Math.random() * (420000 - 180000) + 180000);
+          console.log(`   ⏳ Waiting ${Math.round(waitMs / 60000)} minutes...`);
+          await delay(waitMs);
         }
-
-        await randomDelay(3000, 6000);
+      } else {
+        skipped++;
       }
     }
 
   } catch (err) {
-    console.error('LinkedIn outreach error:', err.message);
+    console.error('LinkedIn outreach session error:', err.message);
   } finally {
     await browser.close();
   }
 
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-  console.log(`📊 LinkedIn: ${connectionsSent} connection requests sent`);
+  console.log(`📊 LinkedIn: ${sent} messages sent, ${skipped} skipped`);
 
+  let messagedLeadsList = messagedLeads.map(l => `- ${l.business_name} (${l.area}) — ${l.lead_type}`).join('\n');
+  
+  const today = new Date().toLocaleDateString();
+  let messagedLeadsList = messagedLeads.map(l => `- ${l.business_name} — ${l.lead_type}`).join('\n');
+  
   await sendTelegramAlert(
-    `💼 *LinkedIn Outreach Complete*\n\n` +
-    `Connection requests: ${connectionsSent}\n` +
-    `Daily limit: ${DAILY_CONNECTION_LIMIT}\n` +
-    `Targets: F&B managers, restaurant chains, Bangalore`
+    `💼 *LinkedIn Report — ${today}*\n\n` +
+    `✅ Messages sent: ${sent}\n` +
+    `❌ Failed: ${skipped}\n` +
+    `🔄 Follow ups sent: 0\n\n` +
+    `*Leads messaged:*\n${messagedLeadsList || 'None'}`
   );
 }
 

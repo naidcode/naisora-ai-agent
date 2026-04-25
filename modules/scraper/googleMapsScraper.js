@@ -223,6 +223,32 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
           placeId = placeIdMatch[1];
         }
 
+        // ── Search for Instagram handle on Google ──
+        let instagramHandle = null;
+        try {
+          const searchPage = await browser.newPage();
+          await searchPage.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+          
+          const igQuery = `${lead.name} ${area} Bangalore Instagram`;
+          await searchPage.goto(`https://www.google.com/search?q=${encodeURIComponent(igQuery)}`, { waitUntil: 'domcontentloaded' });
+          await randomDelay(1500, 2500);
+
+          instagramHandle = await searchPage.evaluate(() => {
+            const links = Array.from(document.querySelectorAll('a[href*="instagram.com"]'));
+            for (const link of links) {
+              const href = link.getAttribute('href');
+              const match = href.match(/instagram\.com\/([a-zA-Z0-9._]+)/);
+              if (match && !['explore', 'reels', 'p', 'stories', 'accounts', 'explore'].includes(match[1])) {
+                return '@' + match[1];
+              }
+            }
+            return null;
+          });
+          await searchPage.close();
+        } catch (igErr) {
+          console.log(`  ⚠️ IG search failed for ${lead.name}`);
+        }
+
         leads.push({
           name: lead.name,
           place_id: placeId,
@@ -238,6 +264,7 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
           address: details.fullAddress || lead.address || null,
           phone: details.phone || null,
           website: details.website || null,
+          instagram_handle: instagramHandle,
           has_website: !!details.website,
           gbp_verified: details.verified || false,
           google_maps_url: mapsUrl,
@@ -249,6 +276,7 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
         process.stdout.write(
           `  [${i + 1}/${Math.min(rawLeads.length, maxResults)}] ` +
             `${lead.name} — Phone: ${details.phone || "❌"} | ` +
+            `IG: ${instagramHandle || "❌"} | ` +
             `Website: ${details.website ? "✅" : "❌ NO SITE"}\n`,
         );
       } catch (err) {
@@ -340,13 +368,11 @@ async function runFullScrape(options = {}) {
   console.log(`   Has website         : ${totalScraped - noWebsiteCount}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 
-  await sendMessage(
-    `🗺️ *Maps Scrape Complete*\n\n` +
-      `Areas: ${areas.join(", ")}\n` +
-      `Total leads: ${totalScraped}\n` +
-      `🎯 No website (hot leads): *${noWebsiteCount}*\n` +
-      `Has website: ${totalScraped - noWebsiteCount}`,
-  );
+  const today = new Date().toLocaleDateString();
+  const badWebsiteCount = allLeads.filter(l => l.lead_type === 'bad_website').length;
+  const weakSeoCount = allLeads.filter(l => l.lead_type === 'weak_seo').length;
+  const skippedCount = allLeads.filter(l => l.lead_type === 'skip').length;
+  const savedCount = allLeads.length; // Assuming all are saved
 
   return allLeads;
 }

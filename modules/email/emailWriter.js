@@ -36,59 +36,54 @@ const GUARANTEES = {
 };
 
 async function writeEmail(lead) {
-  const seoScore = lead.seo_score || Math.floor(Math.random() * 30) + 25;
-  const area = lead.address?.split(',').slice(-2, -1)[0]?.trim() || 'Bangalore';
+  const area = lead.area || 'Bangalore';
+  const leadType = lead.lead_type || 'unknown';
+  const pagespeedScore = lead.pagespeed_score || 0;
 
-  const prompt = `You are writing a cold email for Naisora, a premium web design agency in Bangalore. We specialize in building professional digital storefronts for restaurants and cafes.
-  
-  CURRENT STRATEGY:
-  - We only target restaurants who either DON'T have a website or have an OLD/POOR design.
-  - We provide professional web design and Local SEO (we do NOT guarantee customers, only visibility and a professional look).
-  - We do not have case studies on our own site yet, so do not promise specific "more customer" results.
-  
-  STRICT RULES:
-  - Never use words: "backlinks", "ranking algorithm", "optimization"
-  - Focus instead: "professional look", "matching your food quality", "showing up on Google when people search nearby", "professional online storefront"
-  - Never guarantee "more orders" or "more customers". Guarantee a "professional image" and "local visibility".
-  - Email must be under 150 words total
-  - Must feel personal, not templated
-  - Subject line must create curiosity or urgency regarding their design or presence
-  
-  RESTAURANT DETAILS:
-  Name: ${lead.business_name}
-  Area: ${area}
-  Phone: ${lead.phone || 'N/A'}
-  Website: ${lead.website || 'No website found'}
-  Digital Presence Score: ${seoScore}/100
-  Category: ${lead.category || 'Restaurant'}
-  
-  Write the email in this format:
-  
-  SUBJECT: [Subject line — under 8 words]
-  
-  BODY:
-  [Email body — personal, design-focused, under 150 words]
-  
-  The email should:
-  1. Open with a specific observation about their restaurant (e.g. "I love the vibe of your cafe from the photos")
-  2. Mention the ${seoScore}/100 score and how it relates to their missing or outdated digital storefront
-  3. Explain that people in ${area} are searching for places like theirs but can't find a professional site/menu
-  4. Offer to build them a professional website that matches the quality of their food
-  5. Close with: "Can I send you a free concept design/audit for ${lead.business_name}?"
-  6. Sign off as: Nahid | Naisora | hey@naisora.com`;
+  let bodyPrompt = '';
+  if (leadType === 'no_website') {
+    bodyPrompt = `Write a short cold email to ${lead.business_name} restaurant in ${area}, Bangalore.
+They have no website at all.
+Pain point: losing customers to competitors who have websites.
+Offer: free website audit and growth plan.
+Tone: friendly, direct, confident. Not salesy.
+Sign off as Nahid from Naisora (naisora.com).
+Max 100 words. No subject line needed.`;
+  } else if (leadType === 'bad_website') {
+    bodyPrompt = `Write a short cold email to ${lead.business_name} restaurant in ${area}, Bangalore.
+Their website scored ${pagespeedScore}/100 on Google speed test.
+Pain point: slow website losing customers and ranking lower on Google.
+Offer: free website audit report already prepared.
+Tone: friendly, direct, confident. Not salesy.
+Sign off as Nahid from Naisora (naisora.com).
+Max 100 words. No subject line needed.`;
+  } else if (leadType === 'weak_seo') {
+    bodyPrompt = `Write a short cold email to ${lead.business_name} restaurant in ${area}, Bangalore.
+Their website has weak SEO — competitors ranking above them on Google.
+Pain point: missing customers who search restaurants in ${area} on Google.
+Offer: free SEO audit already done.
+Tone: friendly, direct, confident. Not salesy.
+Sign off as Nahid from Naisora (naisora.com).
+Max 100 words. No subject line needed.`;
+  } else {
+    // If skip or unknown, don't write email
+    return null;
+  }
 
-  const emailText = await askClaudeSonnet(prompt);
+  const subjectPrompt = `Write one cold email subject line for ${lead.business_name} restaurant.
+Lead type: ${leadType}
+Max 8 words. No clickbait. Professional and curiosity-driven.`;
 
-  // Parse subject and body
-  const subjectMatch = emailText.match(/SUBJECT:\s*(.+)/);
-  const bodyMatch = emailText.match(/BODY:\s*([\s\S]+)/);
+  const [body, subject] = await Promise.all([
+    askClaudeSonnet(bodyPrompt),
+    askClaudeSonnet(subjectPrompt)
+  ]);
 
   return {
-    subject: subjectMatch ? subjectMatch[1].trim() : `Quick question about ${lead.business_name}'s website`,
-    body: bodyMatch ? bodyMatch[1].trim() : emailText,
+    subject: subject.replace(/"/g, '').trim(),
+    body: body.trim(),
     lead_id: lead.id,
-    seo_score: seoScore,
-    area: area
+    lead_type: leadType
   };
 }
 
@@ -190,6 +185,10 @@ async function run(leads = null) {
     const emails = [];
     for (const lead of leads) {
       const email = await writeEmail(lead);
+      if (!email) {
+        console.log(`⏩ Skipping email for ${lead.business_name} (Type: ${lead.lead_type})`);
+        continue;
+      }
       emails.push(email);
 
       await supabase.from('outreach_log').insert({

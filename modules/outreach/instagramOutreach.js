@@ -143,27 +143,10 @@ async function checkNoWebsite(page, username) {
   return profileData;
 }
 
-// ─── Write Instagram DM using Sonnet ─────────────────────────────────────────
-async function writeInstagramDM(username, profileData) {
-  const prompt = `Write an Instagram DM for a restaurant/cafe Instagram account.
-
-Username: @${username}
-Bio: ${profileData.bio || 'No bio'}
-Followers: ${profileData.followers}
-Has website: ${profileData.hasWebsite ? 'Yes' : 'NO WEBSITE'}
-
-The DM should feel like a genuine, casual message from a local Bangalore web agency owner who noticed their food content and wants to help them get more customers from Google.`;
-
-  try {
-    const raw = await askClaudeSonnet(prompt, IG_SYSTEM, 150);
-    return await humanizeForChannel(raw, 'instagram');
-  } catch (err) {
-    return `Hey! Love the food content 🍽️ I help Bangalore restaurants like yours get more customers from Google instead of relying on Zomato. Quick question — are you currently getting direct bookings from your own website? — Nahid, Naisora`;
-  }
-}
+const { askClaude } = require('../../config/claude');
 
 // ─── Send DM to a single account ─────────────────────────────────────────────
-async function sendInstagramDM(page, username, message) {
+async function sendInstagramDM(page, username, message, leadId = null) {
   try {
     // Go to their profile and click Message
     await page.goto(`https://www.instagram.com/${username}/`, { waitUntil: 'networkidle2' });
@@ -171,7 +154,8 @@ async function sendInstagramDM(page, username, message) {
 
     // Click Message button
     const messageBtn = await page.$('div[role="button"]:-soup-contains("Message")') ||
-                       await page.$('button:-soup-contains("Message")');
+                       await page.$('button:-soup-contains("Message")') ||
+                       await page.$('button._acan._acap._acas._aj1-._ap30'); // Generic blue button selector fallback
 
     if (!messageBtn) {
       console.log(`   ⚠️  No message button for @${username} — may not be following or account is private`);
@@ -179,10 +163,11 @@ async function sendInstagramDM(page, username, message) {
     }
 
     await messageBtn.click();
-    await randomDelay(2000, 3000);
+    await randomDelay(3000, 5000);
 
     // Type message
     const inputArea = await page.$('div[aria-label="Message"]') ||
+                      await page.$('div[role="textbox"]') ||
                       await page.$('textarea[placeholder]');
 
     if (!inputArea) {
@@ -198,14 +183,15 @@ async function sendInstagramDM(page, username, message) {
     await page.keyboard.press('Enter');
     await randomDelay(1500, 2500);
 
-    // Log to Supabase
+    // Log to outreach_log
     await supabase.from('outreach_log').insert({
+      lead_id: leadId,
       channel: 'instagram',
       message_type: 'cold',
       message_text: message,
       sent_at: new Date().toISOString(),
       delivered: true,
-      reply_text: username, // Store username in reply_text field for Instagram
+      reply_text: username, 
     });
 
     console.log(`   ✅ DM sent to @${username}`);
@@ -218,7 +204,7 @@ async function sendInstagramDM(page, username, message) {
 }
 
 // ─── Main Instagram outreach function ────────────────────────────────────────
-async function runInstagramOutreach(searchTerms = ['restaurant Bangalore', 'cafe Bangalore', 'food Bangalore']) {
+async function runInstagramOutreach() {
   console.log('\n╔══════════════════════════════════════════════╗');
   console.log('║     NAISORA — Instagram Outreach             ║');
   console.log('╚══════════════════════════════════════════════╝');
@@ -228,58 +214,110 @@ async function runInstagramOutreach(searchTerms = ['restaurant Bangalore', 'cafe
     return;
   }
 
+  // 1. Fetch hot leads that have Instagram handles and haven't been messaged
+  const { data: leads, error } = await supabase
+    .from('leads')
+    .select('*')
+    .eq('lead_category', 'hot')
+    .not('instagram_handle', 'is', null)
+    .eq('instagram_dm_sent', false)
+    .limit(10); 
+
+  if (error) {
+    console.error('Error fetching leads:', error.message);
+    return;
+  }
+
+  if (!leads || leads.length === 0) {
+    console.log('📭 No hot leads with Instagram handles found.');
+    return;
+  }
+
+  console.log(`🎯 Found ${leads.length} hot leads for Instagram outreach`);
+
   const browser = await launchBrowser();
   const page = await browser.newPage();
-
+  await page.setViewport({ width: 1280, height: 800 });
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
   let sent = 0;
   let skipped = 0;
+  const messagedLeads = [];
 
   try {
-    await loginInstagram(page);
-    await randomDelay(3000, 5000);
+    const loggedIn = await loginInstagram(page);
+    if (!loggedIn) {
+      console.log('❌ Instagram login failed.');
+      return;
+    }
 
-    for (const searchTerm of searchTerms) {
-      if (sent >= DAILY_LIMIT) break;
+    for (const lead of leads) {
+      if (sent >= 10) break;
 
-      console.log(`\n🔍 Searching: "${searchTerm}"`);
-      const accounts = await searchRestaurantAccounts(page, searchTerm, 8);
-      console.log(`   Found ${accounts.length} accounts`);
+      const username = lead.instagram_handle.replace('@', '').trim();
+      const area = lead.area || 'Bangalore';
+      const leadType = lead.lead_type || 'unknown';
+      const pagespeedScore = lead.pagespeed_score || 0;
 
-      for (const username of accounts) {
-        if (sent >= DAILY_LIMIT) break;
+      console.log(`\n👤 Preparing DM for @${username} (${lead.business_name})...`);
 
-        console.log(`\n👤 Checking @${username}...`);
-        const profileData = await checkNoWebsite(page, username);
+      let prompt = '';
+      if (leadType === 'no_website') {
+        prompt = `Write a short Instagram DM to ${lead.business_name} restaurant in ${area} Bangalore.
+They have no website.
+Pain point: losing customers to competitors with websites.
+Offer: free growth plan ready.
+Tone: casual, warm, natural Instagram style. Not salesy.
+Sign as Nahid from Naisora.
+Max 40 words.`;
+      } else if (leadType === 'bad_website') {
+        prompt = `Write a short Instagram DM to ${lead.business_name} restaurant in ${area} Bangalore.
+Their website scored ${pagespeedScore}/100 on Google speed test.
+Pain point: slow website hurting Google ranking.
+Offer: free audit report ready to share.
+Tone: casual, warm, natural Instagram style. Not salesy.
+Sign as Nahid from Naisora.
+Max 40 words.`;
+      } else if (leadType === 'weak_seo') {
+        prompt = `Write a short Instagram DM to ${lead.business_name} restaurant in ${area} Bangalore.
+Their competitors rank above them on Google.
+Pain point: missing customers who search on Google.
+Offer: free SEO audit ready.
+Tone: casual, warm, natural Instagram style. Not salesy.
+Sign as Nahid from Naisora.
+Max 40 words.`;
+      } else {
+        console.log(`   ⏭️  Unknown lead type — skipping`);
+        skipped++;
+        continue;
+      }
 
-        // Target: no website OR very low followers (under 500 — small local business)
-        if (!profileData.hasWebsite || profileData.followers < 500) {
-          console.log(`   🎯 Target! No website: ${!profileData.hasWebsite}, Followers: ${profileData.followers}`);
+      const message = await askClaude(prompt);
+      const success = await sendInstagramDM(page, username, message.trim(), lead.id);
 
-          const message = await writeInstagramDM(username, profileData);
-          const success = await sendInstagramDM(page, username, message);
+      if (success) {
+        sent++;
+        messagedLeads.push(lead);
+        
+        // Update lead status
+        await supabase
+          .from('leads')
+          .update({ instagram_dm_sent: true, last_contacted_at: new Date().toISOString() })
+          .eq('id', lead.id);
 
-          if (success) {
-            sent++;
-            // Random delay 5-12 minutes between DMs
-            if (sent < DAILY_LIMIT) {
-              const waitMin = Math.floor(Math.random() * 7 + 5);
-              console.log(`   ⏳ Waiting ${waitMin} minutes...`);
-              await randomDelay(waitMin * 60000, (waitMin + 2) * 60000);
-            }
-          }
-        } else {
-          console.log(`   ⏭️  Has website + good followers — skipping`);
-          skipped++;
+        // Random delay 2-5 minutes between each DM as requested
+        if (sent < leads.length && sent < 10) {
+          const waitMs = Math.floor(Math.random() * (300000 - 120000) + 120000);
+          console.log(`   ⏳ Waiting ${Math.round(waitMs / 60000)} minutes...`);
+          await delay(waitMs);
         }
-
-        await randomDelay(3000, 6000);
+      } else {
+        skipped++;
       }
     }
 
   } catch (err) {
-    console.error('Instagram outreach error:', err.message);
+    console.error('Instagram outreach session error:', err.message);
   } finally {
     await browser.close();
   }
@@ -287,11 +325,15 @@ async function runInstagramOutreach(searchTerms = ['restaurant Bangalore', 'cafe
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`📊 Instagram: ${sent} DMs sent, ${skipped} skipped`);
 
+  const today = new Date().toLocaleDateString();
+  let hotLeadsList = messagedLeads.map(l => `- ${l.business_name} — @${l.instagram_handle.replace('@', '')} — ${l.lead_type}`).join('\n');
+  
   await sendTelegramAlert(
-    `📸 *Instagram Outreach Complete*\n\n` +
-    `DMs sent: ${sent}\n` +
-    `Skipped (has website): ${skipped}\n` +
-    `Daily limit: ${DAILY_LIMIT}`
+    `📸 *Instagram DM Report — ${today}*\n\n` +
+    `✅ DMs sent: ${sent}\n` +
+    `❌ Failed: ${skipped}\n` +
+    `🔄 Follow ups sent: 0\n\n` +
+    `*Leads DMed:*\n${hotLeadsList || 'None'}`
   );
 }
 

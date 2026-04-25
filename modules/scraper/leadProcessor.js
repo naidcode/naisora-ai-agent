@@ -32,6 +32,33 @@ if (fs.existsSync('.env')) {
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
 
+const axios = require('axios');
+
+// ─── Get PageSpeed Score ─────────────────────────────────────────────────────
+async function getPageSpeedScore(url) {
+  if (!url) return null;
+  const apiKey = process.env.PAGESPEED_API_KEY;
+  if (!apiKey) {
+    console.warn("⚠️ PAGESPEED_API_KEY missing, skipping score check");
+    return null;
+  }
+
+  try {
+    // Add protocol if missing
+    const targetUrl = url.startsWith('http') ? url : `https://${url}`;
+    const apiURL = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(targetUrl)}&key=${apiKey}&category=performance`;
+    
+    const response = await axios.get(apiURL);
+    const score = response.data?.lighthouseResult?.categories?.performance?.score;
+    
+    if (score === undefined) return null;
+    return Math.round(score * 100);
+  } catch (error) {
+    console.error(`❌ PageSpeed error for ${url}:`, error.message);
+    return null;
+  }
+}
+
 // ─── Indian phone number normaliser ──────────────────────────────────────────
 function normalisePhone(raw) {
   if (!raw) return null;
@@ -135,7 +162,7 @@ function validateLead(raw) {
 }
 
 // ─── Process a single lead ────────────────────────────────────────────────────
-function processLead(raw) {
+async function processLead(raw) {
   // Validate
   const errors = validateLead(raw);
   if (errors.length > 0) {
@@ -144,6 +171,25 @@ function processLead(raw) {
 
   // Normalise phone
   const normalisedPhone = normalisePhone(raw.phone);
+
+  // Determine Lead Type and PageSpeed Score
+  let leadType = 'unknown';
+  let pagespeedScore = null;
+
+  if (!raw.website || !raw.has_website) {
+    leadType = 'no_website';
+  } else {
+    pagespeedScore = await getPageSpeedScore(raw.website);
+    if (pagespeedScore === null) {
+      leadType = 'weak_seo'; // Fallback if pagespeed fails
+    } else if (pagespeedScore < 50) {
+      leadType = 'bad_website';
+    } else if (pagespeedScore <= 70) {
+      leadType = 'weak_seo';
+    } else {
+      leadType = 'skip';
+    }
+  }
 
   // Score
   const score = scoreLead({ ...raw, phone: normalisedPhone });
@@ -166,6 +212,8 @@ function processLead(raw) {
     gbp_verified: raw.gbp_verified || false,
     rating: parseFloat(raw.rating) || null,
     review_count: parseInt(raw.review_count) || 0,
+    pagespeed_score: pagespeedScore,
+    lead_type: leadType,
 
     // Scoring
     lead_score: score,
@@ -173,7 +221,7 @@ function processLead(raw) {
     score_reasons: [],
 
     // Pipeline status
-    outreach_status: "new", // new → contacted → replied → closed → lost
+    outreach_status: leadType === 'skip' ? 'skipped' : 'new', // skip leads immediately
     outreach_channel: null, // whatsapp | email | both
     source: raw.source || "google_maps",
     search_type: raw.search_type || null,
@@ -239,7 +287,7 @@ async function processLeads(rawLeads, saveToDb = true) {
   const stats = { hot: 0, warm: 0, cold: 0, noWebsite: 0, withPhone: 0 };
 
   for (const raw of rawLeads) {
-    const result = processLead(raw);
+    const result = await processLead(raw);
 
     if (!result.valid) {
       invalid.push({ name: raw.name, errors: result.errors });
@@ -250,9 +298,9 @@ async function processLeads(rawLeads, saveToDb = true) {
     processed.push(lead);
 
     // Count stats
-    stats[lead.lead_category]++;
-    if (!lead.has_website) stats.noWebsite++;
+    if (lead.lead_type === 'no_website') stats.noWebsite++;
     if (lead.phone) stats.withPhone++;
+    if (lead.lead_category) stats[lead.lead_category]++;
 
     // Log each lead
     const icon =

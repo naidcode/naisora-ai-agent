@@ -26,6 +26,8 @@ async function getTodayCount() {
   return (logCount || 0) + (queueCount || 0);
 }
 
+const { writeWhatsAppMessage } = require('./whatsappWriter');
+
 // Main daily outreach
 async function sendDailyWhatsApp() {
   if (process.env.WHATSAPP_ENABLED !== 'true') {
@@ -53,6 +55,7 @@ async function sendDailyWhatsApp() {
     .select('*')
     .eq('lead_category', 'hot')
     .neq('outreach_status', 'whatsapp_sent')
+    .neq('outreach_status', 'skipped')
     .not('phone', 'is', null)
     .order('lead_score', { ascending: false })
     .limit(remaining);
@@ -71,17 +74,17 @@ async function sendDailyWhatsApp() {
 
     console.log(`\n📱 [${i + 1}/${leads.length}] Queuing: ${lead.business_name}`);
 
-    const message = `Hi ${lead.business_name} 👋
-    
-I noticed your restaurant doesn't have a strong online presence. 
-I help restaurants in Bangalore get more customers from Google — without paying Zomato commission.
+    const result = await writeWhatsAppMessage(lead);
+    if (!result || !result.message) {
+      console.log(`   ⏩ Skipping ${lead.business_name} (Lead type: ${lead.lead_type})`);
+      continue;
+    }
 
-I already did a free audit for your website. Can I share the results?
-
-— Nahid, Naisora`;
+    const message = result.message;
 
     // INSERT into whatsapp_queue instead of sending directly
     const { error } = await supabase.from('whatsapp_queue').insert({
+      lead_id: lead.id,
       phone: lead.phone,
       message: message,
       status: 'pending'
@@ -107,11 +110,24 @@ I already did a free audit for your website. Can I share the results?
   console.log(`📊 WhatsApp Queue: ${queued} messages added`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 
+  const today = new Date().toLocaleDateString();
+  const noWebsiteLeads = leads.filter(l => l.lead_type === 'no_website').length;
+  const badWebsiteLeads = leads.filter(l => l.lead_type === 'bad_website').length;
+  const weakSeoLeads = leads.filter(l => l.lead_type === 'weak_seo').length;
+
+  const leadsMessaged = leads.map(l => `- ${l.business_name} (${l.area}) — ${l.lead_type}`).join('\n');
+
   await sendMessage(
-    `📱 *WhatsApp Outreach Queued*\n\n` +
-    `✅ Queued: ${queued}\n` +
-    `📊 Today total: ${todayCount + queued}/${DAILY_LIMIT}\n\n` +
-    `💻 Run local whatsapp-service.js to send.`
+    `📱 *WhatsApp Report — ${today}*\n\n` +
+    `✅ Messages sent: ${queued}\n` +
+    `❌ Failed: 0\n` +
+    `🔄 Follow ups sent: 0\n` +
+    `🛑 Daily limit hit: ${todayCount + queued >= DAILY_LIMIT ? 'yes' : 'no'}\n\n` +
+    `*Breakdown:*\n` +
+    `🔴 No website: ${noWebsiteLeads}\n` +
+    `🟡 Bad website: ${badWebsiteLeads}\n` +
+    `🟢 Weak SEO: ${weakSeoLeads}\n\n` +
+    `*Leads messaged:*\n${leadsMessaged || 'None'}`
   );
 }
 

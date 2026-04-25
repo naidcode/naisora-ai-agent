@@ -12,6 +12,10 @@ import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const { handleWhatsAppReply } = require('./modules/outreach/whatsappAutoReply');
+
 dotenv.config();
 
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = pkg;
@@ -38,6 +42,25 @@ async function connectWhatsApp() {
     auth: state,
     printQRInTerminal: true,
     browser: ['Ubuntu', 'Chrome', '20.0.0']
+  });
+
+  // Listen for incoming messages for auto-reply
+  sock.ev.on('messages.upsert', async (m) => {
+    if (m.type !== 'notify') return;
+    for (const msg of m.messages) {
+      if (!msg.key.fromMe && msg.message) {
+        const jid = msg.key.remoteJid;
+        const phone = jid.split('@')[0];
+        const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        
+        if (text) {
+          const aiResponse = await handleWhatsAppReply(phone, text);
+          if (aiResponse) {
+            await sock.sendMessage(jid, { text: aiResponse });
+          }
+        }
+      }
+    }
   });
 
   // Ensure event listeners are registered only once

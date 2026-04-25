@@ -31,6 +31,11 @@ const { generateDashboard } = require('../modules/tracking/dashboard');
 
 const { isStopped } = require('../system/masterSwitch');
 
+const { sendMorningReport, sendEveningDashboard, sendWeeklyReport } = require('../modules/reporting/businessReporting');
+const { runFollowUpEngine } = require('../modules/outreach/followUpEngine');
+const { runHealthCheck } = require('../scripts/health-monitor');
+const { runSelfImprovement } = require('../brain/selfImprover');
+
 // ─── Helper: safeJob ──────────────────────────────────────────────────────────
 function safeJob(name, fn) {
   return async () => {
@@ -44,10 +49,23 @@ function safeJob(name, fn) {
       console.log(`✅ [Cron] ${name} completed successfully.`);
     } catch (err) {
       console.error(`❌ [Cron] ${name} failed:`, err.message);
-      await sendMessage(`❌ *Cron Job Failed: ${name}*\nError: ${err.message}`);
+      await sendMessage(
+        `❌ *AGENT ERROR*\n\n` +
+        `Module: ${name}\n` +
+        `Error: ${err.message}\n` +
+        `Time: ${new Date().toLocaleString()}\n` +
+        `Action needed: yes`
+      );
     }
   };
 }
+
+const { handleEmailReplies } = require('../modules/email/emailReplyHandler');
+
+const { runInstagramOutreach } = require('../modules/outreach/instagramOutreach');
+const { runLinkedInOutreach } = require('../modules/outreach/linkedinOutreach');
+const { checkInstagramReplies } = require('../modules/outreach/instagramAutoReply');
+const { checkLinkedInReplies } = require('../modules/outreach/linkedinAutoReply');
 
 // ─── Start All Jobs ───────────────────────────────────────────────────────────
 function startAllJobs() {
@@ -56,17 +74,44 @@ function startAllJobs() {
   console.log('║         Target: 50 Leads / Day Volume        ║');
   console.log('╚══════════════════════════════════════════════╝\n');
 
-  // 1. DAILY PRIORITY REPORT — 8:30 AM
-  cron.schedule('30 8 * * *', safeJob('Daily Priority Report', async () => {
-    await generateDailyPriorities();
+  // 0. HEALTH MONITOR — 7:00 AM
+  cron.schedule('0 7 * * *', safeJob('Daily Health Monitor', async () => {
+    await runHealthCheck();
   }));
-  console.log('✅ 08:30 AM — Daily Priority Report');
+  console.log('✅ 07:00 AM — Daily Health Monitor');
+
+  // 0.1 EMAIL REPLY HANDLER — Every 30 minutes
+  cron.schedule('*/30 * * * *', safeJob('Email Reply Handler', async () => {
+    await handleEmailReplies();
+  }));
+  console.log('✅ Every 30m — Email Auto-Reply Handler');
+
+  // 0.2 INSTAGRAM & LINKEDIN REPLY HANDLER — Every 2 hours
+  cron.schedule('0 */2 * * *', safeJob('Instagram Reply Handler', async () => {
+    await checkInstagramReplies();
+  }));
+  cron.schedule('30 */2 * * *', safeJob('LinkedIn Reply Handler', async () => {
+    await checkLinkedInReplies();
+  }));
+  console.log('✅ Every 2h — Instagram & LinkedIn Auto-Reply Handler');
+
+  // 1. MORNING PRIORITY REPORT — 8:30 AM
+  cron.schedule('30 8 * * *', safeJob('Morning Priority Report', async () => {
+    await sendMorningReport();
+  }));
+  console.log('✅ 08:30 AM — Morning Priority Report');
 
   // 2. WHATSAPP OUTREACH — 10:00 AM
   cron.schedule('0 10 * * *', safeJob('WhatsApp Outreach', async () => {
     await sendDailyWhatsApp();
   }));
   console.log('✅ 10:00 AM — WhatsApp Outreach (Cold)');
+
+  // 2.1 INSTAGRAM OUTREACH — 10:15 AM
+  cron.schedule('15 10 * * *', safeJob('Instagram Outreach', async () => {
+    await runInstagramOutreach();
+  }));
+  console.log('✅ 10:15 AM — Instagram DM Outreach');
 
   // 3. EMAIL OUTREACH — 11:00 AM
   cron.schedule('0 11 * * *', safeJob('Email Outreach', async () => {
@@ -76,52 +121,55 @@ function startAllJobs() {
   }));
   console.log('✅ 11:00 AM — Email Outreach (Cold + Follow-ups)');
 
-  // 4. CHECK REPLIES — Every 3 hours
+  // 3.1 LINKEDIN OUTREACH — 11:30 AM
+  cron.schedule('30 11 * * *', safeJob('LinkedIn Outreach', async () => {
+    await runLinkedInOutreach();
+  }));
+  console.log('✅ 11:30 AM — LinkedIn Outreach');
+
+  // 4. FOLLOW UP ENGINE — 12:00 PM
+  cron.schedule('0 12 * * *', safeJob('Follow Up Engine', async () => {
+    await runFollowUpEngine();
+  }));
+  console.log('✅ 12:00 PM — Follow Up Engine');
+
+  // 5. CHECK REPLIES — Every 3 hours
   cron.schedule('0 */3 * * *', safeJob('Check Replies', async () => {
     await checkReplies();
   }));
   console.log('✅ Every 3h — Check WhatsApp Replies');
 
-  // 5. WHATSAPP OUTREACH — 2:00 PM
-  cron.schedule('0 14 * * *', safeJob('WhatsApp Outreach', async () => {
-    await sendDailyWhatsApp();
-  }));
-  console.log('✅ 02:00 PM — WhatsApp Outreach (Cold Batch 2)');
-
-  // 6. SCRAPER & AUDIT — 4:00 PM (Find new leads for tomorrow)
+  // 6. SCRAPER & AUDIT — 4:00 PM
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {
-    console.log('🔍 Scraping new leads...');
     const rawLeads = await runFullScrape({
       areas: ['Koramangala', 'Indiranagar', 'HSR Layout', 'Whitefield', 'Jayanagar'],
       searchTypes: ['restaurants', 'cafes'],
       maxPerSearch: 20
     });
-    
     const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');
-    const dedupResult = await getReadyLeads(rawLeads);
-    
-    console.log(`✅ Scraper session done. New: ${dedupResult.newLeads.length}, Follow-ups: ${dedupResult.followUpLeads.length}`);
-    
-    // Scrape emails for these and others
-    console.log('📧 Scraping emails for leads with websites...');
+    await getReadyLeads(rawLeads);
     await scrapeEmailsForLeads(30);
-
-    // Audit a few
     await auditWarmLeads(10);
   }));
   console.log('✅ 04:00 PM — Scraper, Email Scraper & SEO Audit');
 
-  // 7. WEEKLY PIPELINE SUMMARY — Sunday 8 PM
-  cron.schedule('0 20 * * 0', safeJob('Weekly Pipeline Summary', async () => {
-    await weeklyPipelineSummary();
+  // 7. WEEKLY SUNDAY REPORT — 8:00 PM
+  cron.schedule('0 20 * * 0', safeJob('Weekly Sunday Report', async () => {
+    await sendWeeklyReport();
   }));
-  console.log('✅ Sunday 8 PM — Weekly Pipeline Summary');
+  console.log('✅ Sunday 8 PM — Weekly Sunday Report');
 
-  // 8. DAILY DASHBOARD — 9:00 PM
-  cron.schedule('0 21 * * *', safeJob('Daily Dashboard', async () => {
-    await generateDashboard();
+  // 8. SELF IMPROVEMENT BRAIN — Sunday 9 PM
+  cron.schedule('0 21 * * 0', safeJob('Self Improvement Brain', async () => {
+    await runSelfImprovement();
   }));
-  console.log('✅ 09:00 PM — Daily Dashboard');
+  console.log('✅ Sunday 9 PM — Self Improvement Brain');
+
+  // 9. EVENING DASHBOARD — 9:00 PM
+  cron.schedule('0 21 * * *', safeJob('Evening Dashboard', async () => {
+    await sendEveningDashboard();
+  }));
+  console.log('✅ 09:00 PM — Evening Dashboard');
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
   console.log('🤖 Agent is running. All jobs scheduled.');

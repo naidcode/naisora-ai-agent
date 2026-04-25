@@ -88,12 +88,27 @@ async function sendDailyColdEmails() {
   }
 
   // Print final summary
-  console.log('\n' + '═'.repeat(40));
-  console.log('📊 EMAIL SESSION COMPLETE');
-  console.log(`✅ Sent:   ${sent}`);
-  console.log(`❌ Failed: ${failed}`);
-  console.log(`📋 Total:  ${leads.length}`);
-  console.log('═'.repeat(40) + '\n');
+  // 1. Get stats
+  const today = new Date().toLocaleDateString();
+  const noWebsiteLeads = leads.filter(l => l.lead_type === 'no_website').length;
+  const badWebsiteLeads = leads.filter(l => l.lead_type === 'bad_website').length;
+  const weakSeoLeads = leads.filter(l => l.lead_type === 'weak_seo').length;
+
+  const hotLeadsEmailed = leads.filter(l => l.lead_category === 'hot' && sent > 0)
+    .map(l => `- ${l.business_name} (${l.area}) — ${l.lead_type}`).join('\n');
+
+  const { sendMessage } = require('../../config/telegram');
+  await sendMessage(
+    `📧 *Email Outreach Report — ${today}*\n\n` +
+    `✅ Emails sent: ${sent}\n` +
+    `❌ Failed: ${failed}\n` +
+    `🔄 Follow ups sent: 0\n\n` + // Follow ups handled by followUpEngine
+    `*Breakdown:*\n` +
+    `🔴 No website leads: ${noWebsiteLeads} emails\n` +
+    `🟡 Bad website leads: ${badWebsiteLeads} emails\n` +
+    `🟢 Weak SEO leads: ${weakSeoLeads} emails\n\n` +
+    `*Hot leads emailed today:*\n${hotLeadsEmailed || 'None'}`
+  );
 
   return { sent, failed };
 }
