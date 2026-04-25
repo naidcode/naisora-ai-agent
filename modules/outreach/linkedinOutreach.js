@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
 const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
-const { askClaudeSonnet } = require('../../config/claude');
+const { askClaude, askClaudeSonnet } = require('../../config/claude');
 const { humanizeForChannel } = require('./humanizer');
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
@@ -105,22 +105,6 @@ async function loginLinkedIn(page) {
   return true;
 }
 
-// ─── Search for profiles ──────────────────────────────────────────────────────
-async function searchProfiles(page, query, limit = 8) {
-  const encoded = encodeURIComponent(query);
-  await page.goto(
-    `https://www.linkedin.com/search/results/people/?keywords=${encoded}&origin=GLOBAL_SEARCH_HEADER`,
-    { waitUntil: 'networkidle2' }
-  );
-  await randomDelay(3000, 5000);
-
-  const profiles = await page.evaluate(() => {
-    const results = [];
-    const cards = document.querySelectorAll('.entity-result__item');
-
-    cards.forEach(card => {
-      const nameEl = card.querySelector('.entity-result__title-text a');
-const { askClaude } = require('../../config/claude');
 
 // ─── Send LinkedIn message to a single account ────────────────────────────────
 async function sendLinkedInMessage(page, profileUrl, message, leadId = null) {
@@ -313,8 +297,7 @@ Max 60 words.`;
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`📊 LinkedIn: ${sent} messages sent, ${skipped} skipped`);
 
-  let messagedLeadsList = messagedLeads.map(l => `- ${l.business_name} (${l.area}) — ${l.lead_type}`).join('\n');
-  
+
   const today = new Date().toLocaleDateString();
   let messagedLeadsList = messagedLeads.map(l => `- ${l.business_name} — ${l.lead_type}`).join('\n');
   
