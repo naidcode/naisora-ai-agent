@@ -143,6 +143,15 @@ ${results.broken.length > 0 ? `👉 Fix: ${results.broken[0].split(':')[0]}` : '
     );
   }
 
+  if (results.broken.length > 0) {
+    console.log('\n❌ BROKEN MODULES:');
+    results.broken.forEach(b => console.log(b));
+  }
+  if (results.warnings.length > 0) {
+    console.log('\n⚠️ WARNINGS:');
+    results.warnings.forEach(w => console.log(w));
+  }
+
   console.log(`✅ Health check complete. Score: ${results.score}%`);
 }
 
