@@ -1,5 +1,19 @@
 const Imap = require('imap');
 const { simpleParser } = require('mailparser');
+const fs = require('fs');
+
+// Load .env directly
+if (fs.existsSync('.env')) {
+  const envContent = fs.readFileSync('.env', 'utf8');
+  envContent.split('\n').forEach(line => {
+    const cleaned = line.replace(/\r/g, '').trim();
+    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
+      const [key, ...rest] = cleaned.split('=');
+      process.env[key.trim()] = rest.join('=').trim();
+    }
+  });
+}
+
 const { supabase } = require('../../config/database');
 const { askClaudeWithSystem } = require('../../config/claude');
 const { Resend } = require('resend');
