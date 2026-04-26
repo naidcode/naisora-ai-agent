@@ -109,15 +109,15 @@ async function runHealthCheck() {
   results.score = Math.round((results.working.length / totalChecks) * 100);
 
   // Send Report
-  const workingList = results.working.slice(0, 10).map(w => `- ${w}`).join('\n');
+  const workingList = results.working.map(w => `- ${w}`).join('\n');
   const brokenList = results.broken.map(b => `- ${b}`).join('\n');
   const warningList = results.warnings.map(w => `- ${w}`).join('\n');
 
   const report = `🏥 *Daily Health Report — ${today}*
+🕐 *Timezone:* Asia/Kolkata (IST)
 
 ✅ *Working perfectly:*
 ${workingList}
-${results.working.length > 10 ? `...and ${results.working.length - 10} more` : ''}
 
 ❌ *Broken — needs fix:*
 ${brokenList || 'None'}

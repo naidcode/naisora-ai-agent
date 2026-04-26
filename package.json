@@ -24,6 +24,8 @@
     "express": "^5.2.1",
     "googleapis": "^144.0.0",
     "groq-sdk": "^1.1.2",
+    "imap": "^0.8.19",
+    "mailparser": "^3.9.8",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.8",
     "open": "^10.1.0",

@@ -1,80 +1,108 @@
-const { google } = require('googleapis');
+const Imap = require('imap');
+const { simpleParser } = require('mailparser');
 const { supabase } = require('../../config/database');
 const { askClaudeWithSystem } = require('../../config/claude');
 const { Resend } = require('resend');
+const { sendMessage } = require('../../config/telegram');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GMAIL_CLIENT_ID,
-  process.env.GMAIL_CLIENT_SECRET,
-  process.env.GMAIL_REDIRECT_URI
-);
-oauth2Client.setCredentials({
-  refresh_token: process.env.GMAIL_REFRESH_TOKEN
-});
-
-const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+const imapConfig = {
+  user: 'hey@naisora.com',
+  password: process.env.SMTP_PASS,
+  host: 'imap.hostinger.com',
+  port: 993,
+  tls: true,
+  tlsOptions: { rejectUnauthorized: false }
+};
 
 /**
- * Check Gmail for unread replies from leads and auto-reply using Claude
+ * Check Hostinger IMAP for unread replies from leads and auto-reply using Claude
  */
 async function handleEmailReplies() {
-  console.log('\n📧 --- Email Reply Handler Starting ---');
+  console.log('\n📧 --- Email Reply Handler (IMAP) Starting ---');
   
-  try {
-    // 1. Fetch unread messages from Inbox
-    const res = await gmail.users.messages.list({
-      userId: 'me',
-      q: 'is:unread label:inbox'
+  const imap = new Imap(imapConfig);
+
+  return new Promise((resolve, reject) => {
+    imap.once('ready', () => {
+      imap.openBox('INBOX', false, (err, box) => {
+        if (err) {
+          imap.end();
+          return reject(err);
+        }
+
+        // Search for unread messages
+        imap.search(['UNSEEN'], async (err, results) => {
+          if (err) {
+            imap.end();
+            return reject(err);
+          }
+
+          if (!results || results.length === 0) {
+            console.log('   No new unread emails.');
+            imap.end();
+            return resolve();
+          }
+
+          console.log(`   Found ${results.length} unread emails. Processing...`);
+
+          for (const uid of results) {
+            await processMessage(imap, uid);
+          }
+
+          imap.end();
+          resolve();
+        });
+      });
     });
 
-    const messages = res.data.messages || [];
-    if (messages.length === 0) {
-      console.log('   No new unread emails.');
-      return;
-    }
+    imap.once('error', (err) => {
+      console.error('IMAP Error:', err);
+      reject(err);
+    });
 
-    console.log(`   Found ${messages.length} unread emails. Checking for leads...`);
+    imap.once('end', () => {
+      console.log('📧 --- IMAP Connection Closed ---');
+    });
 
-    for (const msgRef of messages) {
-      const msg = await gmail.users.messages.get({ userId: 'me', id: msgRef.id });
-      const headers = msg.data.payload.headers;
-      
-      const fromHeader = headers.find(h => h.name === 'From')?.value || '';
-      const subjectHeader = headers.find(h => h.name === 'Subject')?.value || '';
-      
-      // Extract email address from "Name <email@example.com>"
-      const fromEmailMatch = fromHeader.match(/<(.+)>|(\S+@\S+)/);
-      const fromEmail = fromEmailMatch ? (fromEmailMatch[1] || fromEmailMatch[2]) : fromHeader;
+    imap.connect();
+  });
+}
 
-      if (!fromEmail) continue;
+async function processMessage(imap, uid) {
+  return new Promise((resolve, reject) => {
+    const f = imap.fetch(uid, { bodies: '' });
+    f.on('message', (msg, seqno) => {
+      msg.on('body', async (stream, info) => {
+        try {
+          const parsed = await simpleParser(stream);
+          const fromEmail = parsed.from.value[0].address;
+          const subject = parsed.subject;
+          const body = parsed.text;
 
-      // 2. Match with lead in Supabase
-      const { data: lead } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('email', fromEmail.toLowerCase())
-        .maybeSingle();
+          console.log(`   📩 Processing email from: ${fromEmail}`);
 
-      if (!lead) {
-        console.log(`   ⏩ Skipping email from unknown sender: ${fromEmail}`);
-        // Mark as read so we don't check it again (optional, but keeps inbox clean)
-        await gmail.users.messages.batchModify({
-          userId: 'me',
-          ids: [msgRef.id],
-          removeLabelIds: ['UNREAD']
-        });
-        continue;
-      }
+          // 1. Match with lead in Supabase
+          const { data: lead } = await supabase
+            .from('leads')
+            .select('*')
+            .eq('email', fromEmail.toLowerCase())
+            .maybeSingle();
 
-      console.log(`   📩 Reply from lead: ${lead.business_name} (${fromEmail})`);
+          if (!lead) {
+            console.log(`   ⏩ Skipping email from unknown sender: ${fromEmail}`);
+            // Mark as seen anyway? Or leave it? Usually better to mark as seen if it's not a lead to avoid reprocessing.
+            imap.addFlags(uid, ['\\Seen'], (err) => {
+              if (err) console.error('Error marking as seen:', err);
+            });
+            return resolve();
+          }
 
-      // 3. Extract snippet or full body
-      const body = msg.data.snippet; // Snippet is usually enough for a first reply
+          console.log(`   🎯 Match found! Lead: ${lead.business_name}`);
 
-      // 4. Generate Claude Haiku response
-      const systemPrompt = `You are Nahid from Naisora, a web design agency in Bangalore that builds websites and does SEO for restaurants and cafes.
+          // 2. Generate Claude Haiku response
+          const systemPrompt = `You are Nahid from Naisora, a web design agency in Bangalore that builds websites and does SEO for restaurants and cafes.
 
 You are replying to a restaurant owner on EMAIL who responded to your cold outreach.
 
@@ -92,71 +120,78 @@ Rules:
 Their lead type: ${lead.lead_type || 'unknown'}
 Their business: ${lead.business_name} in ${lead.area}`;
 
-      const aiReply = await askClaudeWithSystem(systemPrompt, body);
+          const aiReply = await askClaudeWithSystem(systemPrompt, body);
 
-      // 5. Send reply via Resend
-      const { data, error: sendError } = await resend.emails.send({
-        from: 'Nahid from Naisora <hey@naisora.com>',
-        to: [fromEmail],
-        subject: `Re: ${subjectHeader}`,
-        text: aiReply,
+          // 3. Send reply via Resend
+          const { data, error: sendError } = await resend.emails.send({
+            from: 'Nahid from Naisora <hey@naisora.com>',
+            to: [fromEmail],
+            subject: `Re: ${subject}`,
+            text: aiReply,
+          });
+
+          if (sendError) {
+            console.error(`   ❌ Failed to send email reply to ${fromEmail}:`, sendError.message);
+            return resolve();
+          }
+
+          console.log(`   ✅ Sent auto-reply to ${lead.business_name}`);
+
+          // 4. Log to outreach_log
+          await supabase.from('outreach_log').insert([
+            {
+              lead_id: lead.id,
+              channel: 'email',
+              message_type: 'reply_received',
+              message_text: body,
+              sent_at: new Date().toISOString()
+            },
+            {
+              lead_id: lead.id,
+              channel: 'email',
+              message_type: 'auto_reply',
+              message_text: aiReply,
+              sent_at: new Date().toISOString()
+            }
+          ]);
+
+          // 5. Update lead status
+          await supabase
+            .from('leads')
+            .update({ 
+              outreach_status: 'replied',
+              reply_received_at: new Date().toISOString()
+            })
+            .eq('id', lead.id);
+
+          // 6. Notify Telegram
+          await sendMessage(
+            `🔔 *NEW REPLY — Email*\n\n` +
+            `👤 *Business:* ${lead.business_name}\n` +
+            `📍 *Area:* ${lead.area}\n` +
+            `💬 *Their message:* ${body.substring(0, 500)}${body.length > 500 ? '...' : ''}\n` +
+            `🤖 *Our auto reply:* ${aiReply}\n` +
+            `📊 *Lead type:* ${lead.lead_type}\n` +
+            `🌡️ *Status:* ${lead.lead_category || 'hot'}`
+          );
+
+          // 7. Mark as seen in IMAP
+          imap.addFlags(uid, ['\\Seen'], (err) => {
+            if (err) console.error('Error marking as seen:', err);
+            resolve();
+          });
+
+        } catch (parseErr) {
+          console.error('Error parsing email:', parseErr);
+          resolve();
+        }
       });
-
-      if (sendError) {
-        console.error(`   ❌ Failed to send email reply to ${fromEmail}:`, sendError.message);
-        continue;
-      }
-
-      console.log(`   ✅ Sent auto-reply to ${lead.business_name}`);
-
-      // 6. Log to outreach_log
-      await supabase.from('outreach_log').insert({
-        lead_id: lead.id,
-        channel: 'email',
-        message_type: 'reply_received',
-        message_text: body,
-        sent_at: new Date().toISOString()
-      });
-
-      await supabase.from('outreach_log').insert({
-        lead_id: lead.id,
-        channel: 'email',
-        message_type: 'auto_reply',
-        message_text: aiReply,
-        sent_at: new Date().toISOString()
-      });
-
-      // 7. Update lead status
-      await supabase
-        .from('leads')
-        .update({ 
-          outreach_status: 'replied',
-          reply_received_at: new Date().toISOString()
-        })
-        .eq('id', lead.id);
-
-      // 8. Mark as read in Gmail
-      await gmail.users.messages.batchModify({
-        userId: 'me',
-        ids: [msgRef.id],
-        removeLabelIds: ['UNREAD']
-      });
-
-      const { sendMessage } = require('../../config/telegram');
-      await sendMessage(
-        `🔔 *NEW REPLY — Email*\n\n` +
-        `👤 *Business:* ${lead.business_name}\n` +
-        `📍 *Area:* ${lead.area}\n` +
-        `💬 *Their message:* ${body}\n` +
-        `🤖 *Our auto reply:* ${aiReply}\n` +
-        `📊 *Lead type:* ${lead.lead_type}\n` +
-        `🌡️ *Status:* ${lead.lead_category || 'hot'}`
-      );
-    }
-
-  } catch (error) {
-    console.error('❌ Email reply handler error:', error.message);
-  }
+    });
+    f.once('error', (err) => {
+      console.error('Fetch error:', err);
+      resolve();
+    });
+  });
 }
 
 module.exports = { handleEmailReplies };
