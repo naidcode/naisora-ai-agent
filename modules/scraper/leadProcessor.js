@@ -173,7 +173,7 @@ async function processLead(raw) {
   const normalisedPhone = normalisePhone(raw.phone);
 
   // Determine Lead Type and PageSpeed Score
-  let leadType = 'unknown';
+  let leadType = 'no_website'; // Default
   let pagespeedScore = null;
 
   if (!raw.website || !raw.has_website) {
@@ -181,7 +181,8 @@ async function processLead(raw) {
   } else {
     pagespeedScore = await getPageSpeedScore(raw.website);
     if (pagespeedScore === null) {
-      leadType = 'weak_seo'; // Fallback if pagespeed fails
+      // If PageSpeed fails, assume weak_seo rather than unknown
+      leadType = 'weak_seo'; 
     } else if (pagespeedScore < 50) {
       leadType = 'bad_website';
     } else if (pagespeedScore <= 70) {

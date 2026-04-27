@@ -68,7 +68,7 @@ function nameSimilarity(a, b) {
 async function fetchExistingLeads() {
   const { data, error } = await supabase
     .from("leads")
-    .select("id, business_name, phone, area, outreach_status, lead_category")
+    .select("id, business_name, phone, area, outreach_status, lead_category, last_contacted_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -91,6 +91,7 @@ function checkDuplicate(newLead, existingLeads) {
         matchedId: existing.id,
         existingStatus: existing.outreach_status,
         label: `Phone match: ${existing.phone}`,
+        lastContactedAt: existing.last_contacted_at
       };
     }
 
@@ -106,6 +107,7 @@ function checkDuplicate(newLead, existingLeads) {
         matchedId: existing.id,
         existingStatus: existing.outreach_status,
         label: `Name+Area match: ${existing.business_name} in ${existing.area}`,
+        lastContactedAt: existing.last_contacted_at
       };
     }
 
@@ -120,6 +122,7 @@ function checkDuplicate(newLead, existingLeads) {
         matchedId: existing.id,
         existingStatus: existing.outreach_status,
         label: `Fuzzy match: "${newLead.business_name}" ≈ "${existing.business_name}"`,
+        lastContactedAt: existing.last_contacted_at
       };
     }
   }
@@ -193,16 +196,17 @@ async function deduplicateLeads(processedLeads) {
     const dupCheck = checkDuplicate(lead, existingLeads);
 
     if (dupCheck.isDuplicate) {
-      // ── Logic: If already CONTACTED/SENT, trigger follow-up flow ──
-      const isContacted = dupCheck.existingStatus === "contacted" || dupCheck.existingStatus === "sent";
+      // ── Fix 5: A lead is duplicate ONLY if contacted in last 7 days ──
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
       
-      if (isContacted) {
-        console.log(`🔁 FOLLOW-UP — ${lead.business_name} (${lead.area}) [Previous: ${dupCheck.existingStatus}]`);
-        followUpLeads.push({ 
-          ...lead, 
-          id: dupCheck.matchedId,
-          existing_status: dupCheck.existingStatus 
-        });
+      const lastContacted = dupCheck.lastContactedAt ? new Date(dupCheck.lastContactedAt) : null;
+      const isRecentlyContacted = lastContacted && lastContacted > sevenDaysAgo;
+
+      if (!isRecentlyContacted) {
+        // Treat as fresh lead for follow up
+        console.log(`✅ RE-ENGAGE — ${lead.business_name} (${lead.area}) [Last contacted: ${dupCheck.lastContactedAt || 'Never'}]`);
+        newLeads.push(lead);
       } else {
         const statusNote =
           dupCheck.existingStatus !== "new"
@@ -211,18 +215,18 @@ async function deduplicateLeads(processedLeads) {
 
         console.log(
           `⏭️  SKIP — ${lead.business_name} (${lead.area})\n` +
-            `   Reason: ${dupCheck.label}${statusNote}\n`,
+            `   Reason: ${dupCheck.label}${statusNote} (Contacted < 7 days ago)\n`,
         );
-      }
 
-      duplicates.push({
-        lead,
-        reason: dupCheck.reason,
-        matchedId: dupCheck.matchedId,
-        label: dupCheck.label,
-        existingStatus: dupCheck.existingStatus,
-        isFollowUp: isContacted
-      });
+        duplicates.push({
+          lead,
+          reason: dupCheck.reason,
+          matchedId: dupCheck.matchedId,
+          label: dupCheck.label,
+          existingStatus: dupCheck.existingStatus,
+          isFollowUp: false
+        });
+      }
     } else {
       // ── Brand new lead ──
       newLeads.push(lead);

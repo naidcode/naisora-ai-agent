@@ -120,6 +120,22 @@ async function getLeadsForFollowup2() {
   return data || [];
 }
 
+// --- Get any leads not contacted in 7+ days (for generic follow-up/gap filling) ---
+async function getLeadsForFollowupGeneric(channel, limit = 50) {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const { data, error } = await supabase
+    .from('leads')
+    .select('*')
+    .lt('last_contacted_at', sevenDaysAgo.toISOString())
+    .limit(limit)
+    .order('last_contacted_at', { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}
+
 // --- Update a lead's status ---
 async function updateLeadStatus(leadId, newStatus, extraData = {}) {
   const { error } = await supabase
@@ -225,6 +241,7 @@ module.exports = {
   getNewLeads,
   getLeadsForFollowup1,
   getLeadsForFollowup2,
+  getLeadsForFollowupGeneric,
   updateLeadStatus,
   markAsInterested,
   logOutreach,

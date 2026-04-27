@@ -31,7 +31,7 @@ const { generateDashboard } = require('../modules/tracking/dashboard');
 
 const { isStopped } = require('../system/masterSwitch');
 
-const { sendMorningReport, sendEveningDashboard, sendWeeklyReport } = require('../modules/reporting/businessReporting');
+const { sendMorningReport, sendEveningDashboard, sendWeeklyReport, sendDailyOutreachTargetReport } = require('../modules/reporting/businessReporting');
 const { runFollowUpEngine } = require('../modules/outreach/followUpEngine');
 const { runHealthCheck } = require('../scripts/health-monitor');
 const { runSelfImprovement } = require('../brain/selfImprover');
@@ -104,12 +104,14 @@ function startAllJobs() {
   // 2. WHATSAPP OUTREACH — 10:00 AM
   cron.schedule('0 10 * * *', safeJob('WhatsApp Outreach', async () => {
     await sendDailyWhatsApp();
+    await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 10:00 AM — WhatsApp Outreach (Cold)');
 
   // 2.1 INSTAGRAM OUTREACH — 10:15 AM
   cron.schedule('15 10 * * *', safeJob('Instagram Outreach', async () => {
     await runInstagramOutreach();
+    await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 10:15 AM — Instagram DM Outreach');
 
@@ -118,12 +120,14 @@ function startAllJobs() {
     await sendDailyColdEmails();
     await sendFollowupEmails1();
     await sendFollowupEmails2();
+    await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 11:00 AM — Email Outreach (Cold + Follow-ups)');
 
   // 3.1 LINKEDIN OUTREACH — 11:30 AM
   cron.schedule('30 11 * * *', safeJob('LinkedIn Outreach', async () => {
     await runLinkedInOutreach();
+    await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 11:30 AM — LinkedIn Outreach');
 
@@ -142,8 +146,18 @@ function startAllJobs() {
   // 6. SCRAPER & AUDIT — 4:00 PM
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {
     const rawLeads = await runFullScrape({
-      areas: ['Koramangala', 'Indiranagar', 'HSR Layout', 'Whitefield', 'Jayanagar'],
-      searchTypes: ['restaurants', 'cafes'],
+      areas: [
+        'Koramangala', 'Indiranagar', 'HSR Layout', 'Whitefield', 'Jayanagar',
+        'Marathahalli', 'Electronic City', 'Bannerghatta Road', 'JP Nagar',
+        'Banashankari', 'Malleshwaram', 'Rajajinagar', 'Hebbal', 'Yelahanka',
+        'Sarjapur Road', 'Bellandur', 'Domlur', 'Frazer Town', 'Ulsoor',
+        'Richmond Town', 'Basavanagudi', 'Jayanagar', 'BTM Layout', 'RT Nagar'
+      ],
+      searchTypes: [
+        'restaurants', 'cafes', 'hotels', 'bars', 'bakeries',
+        'fast food', 'food court', 'dhaba', 'tiffin center',
+        'cloud kitchen', 'catering', 'juice shop', 'tea shop'
+      ],
       maxPerSearch: 20
     });
     const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');

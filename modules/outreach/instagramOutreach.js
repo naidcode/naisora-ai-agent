@@ -205,6 +205,7 @@ async function sendInstagramDM(page, username, message, leadId = null) {
 
 // ─── Main Instagram outreach function ────────────────────────────────────────
 async function runInstagramOutreach() {
+  const TARGET_MINIMUM = 30;
   console.log('\n╔══════════════════════════════════════════════╗');
   console.log('║     NAISORA — Instagram Outreach             ║');
   console.log('╚══════════════════════════════════════════════╝');
@@ -215,13 +216,25 @@ async function runInstagramOutreach() {
   }
 
   // 1. Fetch hot leads that have Instagram handles and haven't been messaged
-  const { data: leads, error } = await supabase
+  let { data: leads, error } = await supabase
     .from('leads')
     .select('*')
     .eq('lead_category', 'hot')
     .not('instagram_handle', 'is', null)
     .eq('instagram_dm_sent', false)
-    .limit(10); 
+    .limit(TARGET_MINIMUM); 
+
+  let followUpsUsed = 0;
+
+  // 2. If not enough new leads, pull from existing leads not contacted in 7+ days
+  if (!leads || leads.length < TARGET_MINIMUM) {
+    const gap = TARGET_MINIMUM - (leads ? leads.length : 0);
+    console.log(`ℹ️  Only ${leads ? leads.length : 0} new Instagram leads found. Pulling ${gap} follow-ups to hit target...`);
+    const { getLeadsForFollowupGeneric } = require('../../config/database');
+    const oldLeads = await getLeadsForFollowupGeneric('instagram', gap);
+    leads = [...(leads || []), ...oldLeads];
+    followUpsUsed = oldLeads.length;
+  }
 
   if (error) {
     console.error('Error fetching leads:', error.message);
@@ -229,11 +242,11 @@ async function runInstagramOutreach() {
   }
 
   if (!leads || leads.length === 0) {
-    console.log('📭 No hot leads with Instagram handles found.');
+    console.log('📭 No leads with Instagram handles found.');
     return;
   }
 
-  console.log(`🎯 Found ${leads.length} hot leads for Instagram outreach`);
+  console.log(`🎯 Found ${leads.length} leads for Instagram outreach`);
 
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -252,11 +265,16 @@ async function runInstagramOutreach() {
     }
 
     for (const lead of leads) {
-      if (sent >= 10) break;
+      if (sent >= TARGET_MINIMUM) break;
 
-      const username = lead.instagram_handle.replace('@', '').trim();
+      const username = lead.instagram_handle ? lead.instagram_handle.replace('@', '').trim() : null;
+      if (!username) {
+        skipped++;
+        continue;
+      }
+
       const area = lead.area || 'Bangalore';
-      const leadType = lead.lead_type || 'unknown';
+      const leadType = lead.lead_type || 'no_website'; // Default to no_website as per Fix 3
       const pagespeedScore = lead.pagespeed_score || 0;
 
       console.log(`\n👤 Preparing DM for @${username} (${lead.business_name})...`);
@@ -287,7 +305,8 @@ Tone: casual, warm, natural Instagram style. Not salesy.
 Sign as Nahid from Naisora.
 Max 40 words.`;
       } else {
-        console.log(`   ⏭️  Unknown lead type — skipping`);
+        // Fix 3: Categorise skip leads or handle them
+        console.log(`   ⏭️  Lead type skip — skipping`);
         skipped++;
         continue;
       }
@@ -305,8 +324,8 @@ Max 40 words.`;
           .update({ instagram_dm_sent: true, last_contacted_at: new Date().toISOString() })
           .eq('id', lead.id);
 
-        // Random delay 2-5 minutes between each DM as requested
-        if (sent < leads.length && sent < 10) {
+        // Random delay 2-5 minutes between each DM
+        if (sent < leads.length && sent < TARGET_MINIMUM) {
           const waitMs = Math.floor(Math.random() * (300000 - 120000) + 120000);
           console.log(`   ⏳ Waiting ${Math.round(waitMs / 60000)} minutes...`);
           await delay(waitMs);
@@ -330,9 +349,9 @@ Max 40 words.`;
   
   await sendTelegramAlert(
     `📸 *Instagram DM Report — ${today}*\n\n` +
-    `✅ DMs sent: ${sent}\n` +
+    `Target: ${TARGET_MINIMUM} | Sent: ${sent} | ${sent >= TARGET_MINIMUM ? '✅' : '❌'}\n` +
     `❌ Failed: ${skipped}\n` +
-    `🔄 Follow ups sent: 0\n\n` +
+    `🔄 Gap filled by follow-ups: ${followUpsUsed}\n\n` +
     `*Leads DMed:*\n${hotLeadsList || 'None'}`
   );
 }

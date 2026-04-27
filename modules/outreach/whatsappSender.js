@@ -35,22 +35,24 @@ async function sendDailyWhatsApp() {
     return;
   }
 
+  const TARGET_MINIMUM = 30;
+
   console.log('\n╔══════════════════════════════════════════════╗');
   console.log('║     NAISORA — WhatsApp Outreach (Queue)      ║');
   console.log('╚══════════════════════════════════════════════╝');
 
   const todayCount = await getTodayCount();
-  const remaining = DAILY_LIMIT - todayCount;
+  const remaining = Math.max(0, TARGET_MINIMUM - todayCount);
 
-  if (remaining <= 0) {
-    console.log('🛑 Daily WhatsApp limit reached');
-    await sendMessage('🛑 Daily WhatsApp limit reached (25 messages)');
+  if (remaining <= 0 && todayCount >= TARGET_MINIMUM) {
+    console.log('🛑 Daily WhatsApp target already hit');
     return;
   }
 
-  console.log(`📊 Today: ${todayCount} handled, ${remaining} remaining\n`);
+  console.log(`📊 Today: ${todayCount} handled, target: ${TARGET_MINIMUM}, remaining to hit target: ${remaining}\n`);
 
-  const { data: leads } = await supabase
+  // 1. Get new hot leads
+  let { data: leads } = await supabase
     .from('leads')
     .select('*')
     .eq('lead_category', 'hot')
@@ -60,12 +62,24 @@ async function sendDailyWhatsApp() {
     .order('lead_score', { ascending: false })
     .limit(remaining);
 
+  let followUpsUsed = 0;
+
+  // 2. If not enough new leads, pull from existing leads not contacted in 7+ days
+  if (!leads || leads.length < remaining) {
+    const gap = remaining - (leads ? leads.length : 0);
+    console.log(`ℹ️  Only ${leads ? leads.length : 0} new hot leads found. Pulling ${gap} follow-ups to hit target...`);
+    const { getLeadsForFollowupGeneric } = require('../../config/database');
+    const oldLeads = await getLeadsForFollowupGeneric('whatsapp', gap);
+    leads = [...(leads || []), ...oldLeads];
+    followUpsUsed = oldLeads.length;
+  }
+
   if (!leads || leads.length === 0) {
-    console.log('📭 No hot leads ready for WhatsApp today.');
+    console.log('📭 No leads ready for WhatsApp today.');
     return;
   }
 
-  console.log(`🎯 ${leads.length} hot leads to queue today\n`);
+  console.log(`🎯 ${leads.length} leads to queue today\n`);
 
   let queued = 0;
 
@@ -119,10 +133,9 @@ async function sendDailyWhatsApp() {
 
   await sendMessage(
     `📱 *WhatsApp Report — ${today}*\n\n` +
-    `✅ Messages sent: ${queued}\n` +
+    `Target: ${TARGET_MINIMUM} | Sent: ${queued} | ${queued >= TARGET_MINIMUM ? '✅' : '❌'}\n` +
     `❌ Failed: 0\n` +
-    `🔄 Follow ups sent: 0\n` +
-    `🛑 Daily limit hit: ${todayCount + queued >= DAILY_LIMIT ? 'yes' : 'no'}\n\n` +
+    `🔄 Gap filled by follow-ups: ${followUpsUsed}\n\n` +
     `*Breakdown:*\n` +
     `🔴 No website: ${noWebsiteLeads}\n` +
     `🟡 Bad website: ${badWebsiteLeads}\n` +

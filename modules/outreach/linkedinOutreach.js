@@ -177,6 +177,7 @@ async function sendLinkedInMessage(page, profileUrl, message, leadId = null) {
 
 // ─── Main LinkedIn outreach function ─────────────────────────────────────────
 async function runLinkedInOutreach() {
+  const TARGET_MINIMUM = 30;
   console.log('\n╔══════════════════════════════════════════════╗');
   console.log('║     NAISORA — LinkedIn Outreach              ║');
   console.log('╚══════════════════════════════════════════════╝');
@@ -187,13 +188,25 @@ async function runLinkedInOutreach() {
   }
 
   // 1. Fetch warm leads that have LinkedIn URLs and haven't been messaged
-  const { data: leads, error } = await supabase
+  let { data: leads, error } = await supabase
     .from('leads')
     .select('*')
     .eq('lead_category', 'warm')
     .not('linkedin_url', 'is', null)
     .eq('linkedin_sent', false)
-    .limit(10); 
+    .limit(TARGET_MINIMUM); 
+
+  let followUpsUsed = 0;
+
+  // 2. If not enough new leads, pull from existing leads not contacted in 7+ days
+  if (!leads || leads.length < TARGET_MINIMUM) {
+    const gap = TARGET_MINIMUM - (leads ? leads.length : 0);
+    console.log(`ℹ️  Only ${leads ? leads.length : 0} new LinkedIn leads found. Pulling ${gap} follow-ups to hit target...`);
+    const { getLeadsForFollowupGeneric } = require('../../config/database');
+    const oldLeads = await getLeadsForFollowupGeneric('linkedin', gap);
+    leads = [...(leads || []), ...oldLeads];
+    followUpsUsed = oldLeads.length;
+  }
 
   if (error) {
     console.error('Error fetching leads:', error.message);
@@ -201,11 +214,11 @@ async function runLinkedInOutreach() {
   }
 
   if (!leads || leads.length === 0) {
-    console.log('📭 No warm leads with LinkedIn URLs found.');
+    console.log('📭 No leads with LinkedIn URLs found.');
     return;
   }
 
-  console.log(`🎯 Found ${leads.length} warm leads for LinkedIn outreach`);
+  console.log(`🎯 Found ${leads.length} leads for LinkedIn outreach`);
 
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -224,11 +237,11 @@ async function runLinkedInOutreach() {
     }
 
     for (const lead of leads) {
-      if (sent >= 10) break;
+      if (sent >= TARGET_MINIMUM) break;
 
       const profileUrl = lead.linkedin_url;
       const area = lead.area || 'Bangalore';
-      const leadType = lead.lead_type || 'unknown';
+      const leadType = lead.lead_type || 'no_website'; // Default to no_website as per Fix 3
       const pagespeedScore = lead.pagespeed_score || 0;
 
       console.log(`\n👤 Preparing message for ${lead.business_name}...`);
@@ -259,7 +272,8 @@ Tone: professional but warm. LinkedIn style.
 Sign as Nahid, Founder at Naisora.
 Max 60 words.`;
       } else {
-        console.log(`   ⏭️  Unknown lead type — skipping`);
+        // Fix 3: Categorise skip leads or handle them
+        console.log(`   ⏭️  Lead type skip — skipping`);
         skipped++;
         continue;
       }
@@ -277,8 +291,8 @@ Max 60 words.`;
           .update({ linkedin_sent: true, last_contacted_at: new Date().toISOString() })
           .eq('id', lead.id);
 
-        // Random delay 3-7 minutes between each message as requested
-        if (sent < leads.length && sent < 10) {
+        // Random delay 3-7 minutes between each message
+        if (sent < leads.length && sent < TARGET_MINIMUM) {
           const waitMs = Math.floor(Math.random() * (420000 - 180000) + 180000);
           console.log(`   ⏳ Waiting ${Math.round(waitMs / 60000)} minutes...`);
           await delay(waitMs);
@@ -297,15 +311,14 @@ Max 60 words.`;
   console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
   console.log(`📊 LinkedIn: ${sent} messages sent, ${skipped} skipped`);
 
-
   const today = new Date().toLocaleDateString();
   let messagedLeadsList = messagedLeads.map(l => `- ${l.business_name} — ${l.lead_type}`).join('\n');
   
   await sendTelegramAlert(
     `💼 *LinkedIn Report — ${today}*\n\n` +
-    `✅ Messages sent: ${sent}\n` +
+    `Target: ${TARGET_MINIMUM} | Sent: ${sent} | ${sent >= TARGET_MINIMUM ? '✅' : '❌'}\n` +
     `❌ Failed: ${skipped}\n` +
-    `🔄 Follow ups sent: 0\n\n` +
+    `🔄 Gap filled by follow-ups: ${followUpsUsed}\n\n` +
     `*Leads messaged:*\n${messagedLeadsList || 'None'}`
   );
 }

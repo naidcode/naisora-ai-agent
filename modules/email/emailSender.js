@@ -26,45 +26,69 @@ if (fs.existsSync('.env')) {
 // Call this every morning at 10 AM
 // ============================================
 async function sendDailyColdEmails() {
+  const TARGET_MINIMUM = 50;
   console.log('\n📬 Starting daily email send...');
   console.log('Time:', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
   
-  // Get up to 50 new leads from database
-  const leads = await getNewLeads(50);
-  
-  if (leads.length === 0) {
-    console.log('ℹ️  No new leads to email today.');
-    return { sent: 0, failed: 0 };
+  // 1. Get new leads
+  let leads = await getNewLeads(TARGET_MINIMUM);
+  let followUpsUsed = 0;
+
+  // 2. If not enough new leads, pull from existing leads not contacted in 7+ days
+  if (leads.length < TARGET_MINIMUM) {
+    const gap = TARGET_MINIMUM - leads.length;
+    console.log(`ℹ️  Only ${leads.length} new leads found. Pulling ${gap} follow-ups to hit target...`);
+    const { getLeadsForFollowupGeneric } = require('../../config/database');
+    const oldLeads = await getLeadsForFollowupGeneric('email', gap);
+    leads = [...leads, ...oldLeads];
+    followUpsUsed = oldLeads.length;
   }
 
-  console.log(`📋 Found ${leads.length} new leads to email\n`);
+  if (leads.length === 0) {
+    console.log('ℹ️  No leads available for email today.');
+    return { sent: 0, failed: 0, gap_filled: 0 };
+  }
+
+  console.log(`📋 Total leads for today: ${leads.length}\n`);
 
   let sent = 0;
   let failed = 0;
+  let skippedNoEmail = 0;
 
   for (const lead of leads) {
-    if (!lead.email) {
-      console.log(`⚠️  Skipping ${lead.business_name} (no email)`);
+    let emailAddress = lead.email;
+
+    // Fix 4: Fallback - try to find email if missing
+    if (!emailAddress && lead.website) {
+      console.log(`🔍 No email for ${lead.business_name}, trying to find from website: ${lead.website}...`);
+      emailAddress = await findEmailOnWebsite(lead.website);
+      if (emailAddress) {
+        console.log(`✅ Found email: ${emailAddress}`);
+        // Update lead in DB so we don't have to scrape again
+        await updateLeadStatus(lead.id, lead.outreach_status, { email: emailAddress });
+      }
+    }
+
+    if (!emailAddress) {
+      console.log(`⚠️  Skipping ${lead.business_name} (no email found after search)`);
+      skippedNoEmail++;
       continue;
     }
+
     try {
       console.log(`\n✍️  Writing email for: ${lead.business_name}...`);
       
-      // Step 1: Use Claude to write a personalized email
       const email = await writeColdEmail(lead);
       
       console.log(`📧 Subject: ${email.subject}`);
-      console.log(`📤 Sending to: ${lead.email}...`);
+      console.log(`📤 Sending to: ${emailAddress}...`);
       
-      // Step 2: Send the email via Gmail API
-      await sendEmail(lead.email, email.subject, email.body);
+      await sendEmail(emailAddress, email.subject, email.body);
       
-      // Step 3: Update status in database
       await updateLeadStatus(lead.id, STATUS.CONTACTED, {
         email_subject: email.subject,
       });
       
-      // Step 4: Log to outreach_log
       await logOutreach(lead.id, 'email', 'cold', email.body, {
         subject: email.subject
       });
@@ -72,9 +96,6 @@ async function sendDailyColdEmails() {
       sent++;
       console.log(`✅ Sent! (${sent}/${leads.length})`);
 
-      // Wait 2-5 minutes between emails
-      // This makes it look human — not automated
-      // IMPORTANT: Don't remove this delay!
       if (sent < leads.length) {
         const waitTime = randomDelay(2, 5);
         console.log(`⏳ Waiting ${waitTime} seconds before next email...`);
@@ -83,34 +104,65 @@ async function sendDailyColdEmails() {
 
     } catch (error) {
       failed++;
-      console.error(`❌ Error processing lead ${lead.email}:`, error.message);
+      console.error(`❌ Error processing lead ${lead.business_name} (${emailAddress}):`, error.message);
+      
+      const { sendMessage } = require('../../config/telegram');
+      await sendMessage(
+        `❌ *Email failed for ${lead.business_name}*\n` +
+        `Reason: ${error.message || 'SMTP error'}\n` +
+        `Email: ${emailAddress || 'N/A'}`
+      );
     }
   }
 
   // Print final summary
-  // 1. Get stats
   const today = new Date().toLocaleDateString();
   const noWebsiteLeads = leads.filter(l => l.lead_type === 'no_website').length;
   const badWebsiteLeads = leads.filter(l => l.lead_type === 'bad_website').length;
   const weakSeoLeads = leads.filter(l => l.lead_type === 'weak_seo').length;
 
   const hotLeadsEmailed = leads.filter(l => l.lead_category === 'hot' && sent > 0)
-    .map(l => `- ${l.business_name} (${l.area}) — ${l.lead_type}`).join('\n');
+    .map(l => `- ${l.business_name} (${l.area})`).join('\n');
 
   const { sendMessage } = require('../../config/telegram');
   await sendMessage(
     `📧 *Email Outreach Report — ${today}*\n\n` +
-    `✅ Emails sent: ${sent}\n` +
+    `Target: ${TARGET_MINIMUM} | Sent: ${sent} | ${sent >= TARGET_MINIMUM ? '✅' : '❌'}\n` +
     `❌ Failed: ${failed}\n` +
-    `🔄 Follow ups sent: 0\n\n` + // Follow ups handled by followUpEngine
+    `⏭️ Skipped (No Email): ${skippedNoEmail}\n` +
+    `🔄 Gap filled by follow-ups: ${followUpsUsed}\n\n` +
     `*Breakdown:*\n` +
-    `🔴 No website leads: ${noWebsiteLeads} emails\n` +
-    `🟡 Bad website leads: ${badWebsiteLeads} emails\n` +
-    `🟢 Weak SEO leads: ${weakSeoLeads} emails\n\n` +
+    `🔴 No website leads: ${noWebsiteLeads}\n` +
+    `🟡 Bad website leads: ${badWebsiteLeads}\n` +
+    `🟢 Weak SEO leads: ${weakSeoLeads}\n\n` +
     `*Hot leads emailed today:*\n${hotLeadsEmailed || 'None'}`
   );
 
-  return { sent, failed };
+  return { sent, failed, gap_filled: followUpsUsed };
+}
+
+async function findEmailOnWebsite(url) {
+  const puppeteer = require('puppeteer');
+  let browser;
+  try {
+    browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+    
+    const content = await page.content();
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const matches = content.match(emailRegex);
+    
+    if (matches && matches.length > 0) {
+      // Filter out common false positives or image extensions
+      return matches.find(e => !e.endsWith('.png') && !e.endsWith('.jpg') && !e.endsWith('.jpeg') && !e.endsWith('.webp'));
+    }
+  } catch (err) {
+    console.error(`   ❌ Failed to scrape email from ${url}:`, err.message);
+  } finally {
+    if (browser) await browser.close();
+  }
+  return null;
 }
 
 // ============================================

@@ -220,4 +220,84 @@ Week of ${new Date().toLocaleDateString()}
   }
 }
 
-module.exports = { sendMorningReport, sendEveningDashboard, sendWeeklyReport };
+/**
+ * Daily Target Report (After each outreach session)
+ */
+async function sendDailyOutreachTargetReport() {
+  console.log('📊 Generating daily target report...');
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayISO = todayStart.toISOString();
+
+  try {
+    // 1. Get outreach logs for today
+    const { data: logs } = await supabase
+      .from('outreach_log')
+      .select('channel, message_type, lead_id')
+      .gte('sent_at', todayISO);
+
+    // 2. Get lead types for leads contacted today
+    const leadIds = [...new Set(logs.map(l => l.lead_id))];
+    let leadTypes = { no_website: 0, bad_website: 0, weak_seo: 0 };
+    
+    if (leadIds.length > 0) {
+      const { data: leads } = await supabase
+        .from('leads')
+        .select('lead_type')
+        .in('id', leadIds);
+      
+      leads.forEach(l => {
+        if (l.lead_type === 'no_website') leadTypes.no_website++;
+        else if (l.lead_type === 'bad_website') leadTypes.bad_website++;
+        else if (l.lead_type === 'weak_seo') leadTypes.weak_seo++;
+      });
+    }
+
+    // 3. Calculate stats
+    const stats = {
+      email: logs.filter(l => l.channel === 'email' && l.message_type === 'cold').length,
+      whatsapp: logs.filter(l => l.channel === 'whatsapp' && l.message_type === 'cold').length,
+      instagram: logs.filter(l => l.channel === 'instagram' && l.message_type === 'cold').length,
+      linkedin: logs.filter(l => l.channel === 'linkedin' && l.message_type === 'cold').length,
+      followups: logs.filter(l => l.message_type.includes('followup') || l.message_type === 'auto_followup').length
+    };
+
+    const targets = { email: 50, whatsapp: 30, instagram: 30, linkedin: 30 };
+    const check = (sent, target) => sent >= target ? '✅' : '❌';
+
+    const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    const message = `📊 *Daily Outreach Targets — ${today}*
+
+📧 *Email:*
+Target: ${targets.email} | Sent: ${stats.email} | ${check(stats.email, targets.email)}
+
+📱 *WhatsApp:*
+Target: ${targets.whatsapp} | Sent: ${stats.whatsapp} | ${check(stats.whatsapp, targets.whatsapp)}
+
+📸 *Instagram:*
+Target: ${targets.instagram} | Sent: ${stats.instagram} | ${check(stats.instagram, targets.instagram)}
+
+💼 *LinkedIn:*
+Target: ${targets.linkedin} | Sent: ${stats.linkedin} | ${check(stats.linkedin, targets.linkedin)}
+
+🔴 No website leads: ${leadTypes.no_website}
+🟡 Bad website leads: ${leadTypes.bad_website}
+🟢 Weak SEO leads: ${leadTypes.weak_seo}
+
+Gap filled by follow ups: ${stats.followups}`;
+
+    await sendMessage(message);
+    console.log('✅ Daily target report sent.');
+
+  } catch (error) {
+    console.error('Daily target report error:', error.message);
+  }
+}
+
+module.exports = { 
+  sendMorningReport, 
+  sendEveningDashboard, 
+  sendWeeklyReport,
+  sendDailyOutreachTargetReport
+};
