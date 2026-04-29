@@ -66,8 +66,13 @@ Tone: friendly, direct, confident. Not salesy.
 Sign off as Nahid from Naisora (naisora.com).
 Max 100 words. No subject line needed.`;
   } else {
-    // If skip or unknown, don't write email
-    return null;
+    // Fallback for unknown lead types to avoid null return error
+    bodyPrompt = `Write a short cold email to ${lead.business_name} restaurant in ${area}, Bangalore.
+They have some digital presence but there is room for improvement in visibility and branding.
+Offer: free professional website audit and digital growth plan.
+Tone: friendly, direct, confident. Not salesy.
+Sign off as Nahid from Naisora (naisora.com).
+Max 100 words. No subject line needed.`;
   }
 
   const subjectPrompt = `Write one cold email subject line for ${lead.business_name} restaurant.

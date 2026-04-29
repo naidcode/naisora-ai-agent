@@ -97,7 +97,8 @@ async function runHealthCheck() {
 
     // 6. Puppeteer
     try {
-        const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+        const { launchBrowser } = require('./config/puppeteer');
+        const browser = await launchBrowser();
         const page = await browser.newPage();
         await page.goto('https://example.com');
         const title = await page.title();
@@ -143,13 +144,12 @@ async function runHealthCheck() {
         }
     } catch (e) { report.linkedin.error = e.message; }
 
-    // 10. WhatsApp Baileys
+    // 10. WhatsApp UltraMsg
     try {
-        const waPath = path.join(__dirname, 'auth_info_baileys', 'creds.json');
-        if (fs.existsSync(waPath)) {
-            report.whatsapp = '✅ WhatsApp — Session connected (creds.json found)';
+        if (process.env.ULTRAMSG_INSTANCE && process.env.ULTRAMSG_TOKEN) {
+            report.whatsapp = `✅ WhatsApp — UltraMsg configured (Instance: ${process.env.ULTRAMSG_INSTANCE})`;
         } else {
-            report.whatsapp = '⚠️ WhatsApp — Module ready, but session missing (SIM pending / Scan QR required)';
+            report.whatsapp = '⚠️ WhatsApp — UltraMsg config missing in .env';
         }
     } catch (e) { report.whatsapp = `❌ WhatsApp Module Check Failed: ${e.message}`; }
 

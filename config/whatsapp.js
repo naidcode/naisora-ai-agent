@@ -1,50 +1,27 @@
-const path = require('path');
-const fs = require('fs');
-const { supabase } = require('./database');
+const { sendUltraMsg } = require('./ultramsg');
 
 /**
  * sendWhatsAppMessage
- * In Queue Mode (Railway), this inserts into the 'whatsapp_queue' table.
- * On Local, it still uses the Baileys socket if connected.
+ * Sends a message via UltraMsg API
  */
 async function sendWhatsAppMessage(phone, message) {
   try {
-    // Check if we are in Queue Mode (Railway or explicitly enabled)
-    const IS_RAILWAY = !!process.env.RAILWAY_ENVIRONMENT;
-    
-    if (IS_RAILWAY) {
-      console.log(`☁️  Railway detected: Queuing message for ${phone}`);
-      const { error } = await supabase.from('whatsapp_queue').insert({
-        phone: phone,
-        message: message,
-        status: 'pending'
-      });
-      return !error;
-    }
-
-    // Local sending logic (if needed)
-    // Note: Most local sending should happen via whatsapp-service.js now
-    console.log(`💻 Local detected: Queuing message for ${phone} (Local Service will handle it)`);
-    const { error } = await supabase.from('whatsapp_queue').insert({
-      phone: phone,
-      message: message,
-      status: 'pending'
-    });
-    return !error;
+    console.log(`📤 Sending UltraMsg to ${phone}`);
+    await sendUltraMsg(phone, message);
+    return true;
   } catch (err) {
-    console.log(`❌ Failed to handle WhatsApp for ${phone}: ${err.message}`);
+    console.log(`❌ UltraMsg failed for ${phone}: ${err.message}`);
     return false;
   }
 }
 
-// Stub for connection (not used on Railway anymore)
+// Stub for compatibility
 async function connectWhatsApp() {
-  console.log('ℹ️  connectWhatsApp() called: Redirecting to Queue Mode.');
-  return null;
+  return true;
 }
 
 function getWhatsAppStatus() {
-  return '☁️  Queue Mode';
+  return '🟢 UltraMsg API Ready';
 }
 
 module.exports = { connectWhatsApp, getWhatsAppStatus, sendWhatsAppMessage };

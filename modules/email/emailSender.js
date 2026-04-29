@@ -142,10 +142,10 @@ async function sendDailyColdEmails() {
 }
 
 async function findEmailOnWebsite(url) {
-  const puppeteer = require('puppeteer');
+  const { launchBrowser } = require('../../config/puppeteer');
   let browser;
   try {
-    browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    browser = await launchBrowser();
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
     

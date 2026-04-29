@@ -4,7 +4,7 @@
 // Extracts: name, rating, reviews, phone, website, address, category
 // Priority target: businesses with NO website (highest conversion)
 
-const puppeteer = require("puppeteer");
+const { launchBrowser } = require('../../config/puppeteer');
 const { sendMessage } = require('../../config/telegram');
 
 // ─── Bangalore target areas ──────────────────────────────────────────────────
@@ -50,10 +50,7 @@ const randomDelay = (min = 1500, max = 3500) =>
  * @returns {Array} Array of raw lead objects
  */
 async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+  const browser = await launchBrowser();
 
   const leads = [];
 

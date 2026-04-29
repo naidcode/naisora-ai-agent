@@ -5,7 +5,8 @@
 // Uses Puppeteer with saved session
 
 require('dotenv').config();
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('../../config/puppeteer');
+
 const fs = require('fs');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
@@ -57,14 +58,6 @@ function loadSession() {
     return JSON.parse(fs.readFileSync(SESSION_FILE));
   }
   return null;
-}
-
-// ─── Launch browser ───────────────────────────────────────────────────────────
-async function launchBrowser() {
-  return await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
 }
 
 // ─── Login to LinkedIn ────────────────────────────────────────────────────────

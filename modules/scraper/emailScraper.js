@@ -17,7 +17,7 @@ if (fs.existsSync('.env')) {
   });
 }
 
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('../../config/puppeteer');
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
 
@@ -185,10 +185,7 @@ async function scrapeEmailsForLeads(limit = 50) {
 
   console.log(`🎯 Scraping emails for ${leads.length} leads with websites\n`);
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+  const browser = await launchBrowser();;
 
   const page = await browser.newPage();
   await page.setUserAgent(
@@ -253,10 +250,7 @@ async function scrapeEmailsForLeads(limit = 50) {
 async function scrapeEmailForLead(lead) {
   if (!lead.has_website || !lead.website) return null;
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+  const browser = await launchBrowser();;
 
   const page = await browser.newPage();
 

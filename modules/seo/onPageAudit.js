@@ -2,14 +2,11 @@
 // Full on-page SEO audit for client websites
 
 require('dotenv').config();
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('../../config/puppeteer');
 const { route } = require('../../config/llmRouter');
 
 async function runOnPageAudit(url) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+  const browser = await launchBrowser();
   const page = await browser.newPage();
 
   try {

@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('../../config/puppeteer');
 const { createClient } = require('@supabase/supabase-js');
 const { sendTelegram } = require('../../config/telegram');
 const Anthropic = require('@anthropic-ai/sdk');
@@ -175,10 +175,7 @@ function generateReportHTML(data, summary) {
 }
 
 async function generatePdf(html, outputPath) {
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
+  const browser = await launchBrowser();
 
   const page = await browser.newPage();
   await page.setContent(html, { waitUntil: 'networkidle0' });

@@ -15,46 +15,49 @@ if (fs.existsSync('.env')) {
   });
 }
 
-const twilio = require('twilio');
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
+const { sendUltraMsg } = require('../../config/ultramsg');
 
-// ─── Fetch messages from Twilio ───────────────────────────────────────────────
-async function fetchTwilioReplies(hoursBack = 2) {
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
-  const since = new Date();
-  since.setHours(since.getHours() - hoursBack);
-
+// ─── Fetch messages from UltraMsg ───────────────────────────────────────────────
+async function fetchUltraMsgReplies() {
+  const instance = process.env.ULTRAMSG_INSTANCE;
+  const token = process.env.ULTRAMSG_TOKEN;
+  
   try {
-    const messages = await client.messages.list({
-      to: process.env.TWILIO_WHATSAPP_NUMBER,
-      dateSentAfter: since,
-    });
-    return messages.filter(m => m.direction === 'inbound');
+    const url = `https://api.ultramsg.com/${instance}/messages?token=${token}&msgId=&to=&page=1&limit=50&sort=desc`;
+    const response = await fetch(url);
+    const data = await response.json();
+    
+    // Filter for inbound messages only
+    return (data.messages || []).filter(m => m.fromMe === false && m.type === 'chat');
   } catch (err) {
-    console.error('Twilio fetch error:', err.message);
+    console.error('UltraMsg fetch error:', err.message);
     return [];
   }
 }
 
 // ─── Match reply to lead in Supabase ─────────────────────────────────────────
 async function matchReplyToLead(fromNumber) {
-  const normalised = fromNumber.replace('whatsapp:', '');
+  const normalised = fromNumber.replace(/\D/g, '');
+  // Try to match with or without 91 prefix
+  const cleanPhone = normalised.startsWith('91') && normalised.length > 10 ? normalised.substring(2) : normalised;
+  
   const { data } = await supabase
     .from('leads')
     .select('*')
-    .eq('phone', normalised)
-    .single();
+    .or(`phone.eq.${normalised},phone.eq.${cleanPhone}`)
+    .maybeSingle();
   return data || null;
 }
 
 // ─── Check if we already saved this reply (avoid duplicates) ─────────────────
-async function replyAlreadySaved(twilioSid) {
+async function replyAlreadySaved(msgId) {
   const { data } = await supabase
     .from('outreach_log')
     .select('id')
-    .eq('twilio_sid', twilioSid)
-    .single();
+    .eq('external_msg_id', msgId)
+    .maybeSingle();
   return !!data;
 }
 
@@ -65,9 +68,8 @@ async function saveReply(lead, message) {
     channel: 'whatsapp',
     message_type: 'reply_received',
     message_text: message.body,
-    sent_at: message.dateSent,
-    replied: true,
-    reply_text: message.body,
+    sent_at: new Date(message.timestamp * 1000).toISOString(),
+    external_msg_id: message.id,
   });
 
   await supabase
@@ -111,25 +113,26 @@ async function triggerCallBooking(lead, replyText) {
 
 // ─── Main reply check function ────────────────────────────────────────────────
 async function checkReplies() {
-  console.log('\n📬 Checking WhatsApp replies...');
+  console.log('\n📬 Checking WhatsApp replies via UltraMsg...');
 
-  const replies = await fetchTwilioReplies(2);
+  const replies = await fetchUltraMsgReplies();
 
   if (replies.length === 0) {
-    console.log('   No new replies in last 2 hours.');
+    console.log('   No new replies found.');
     return [];
   }
 
-  console.log(`   Found ${replies.length} incoming messages`);
+  console.log(`   Found ${replies.length} recent messages`);
   const newReplies = [];
 
   for (const message of replies) {
-    const alreadySaved = await replyAlreadySaved(message.sid);
+    const alreadySaved = await replyAlreadySaved(message.id);
     if (alreadySaved) continue;
 
-    const lead = await matchReplyToLead(message.from);
+    const fromPhone = message.from.split('@')[0];
+    const lead = await matchReplyToLead(fromPhone);
     if (!lead) {
-      console.log(`   ⚠️  Unknown number: ${message.from} — skipping`);
+      console.log(`   ⚠️  Unknown number: ${fromPhone} — skipping`);
       continue;
     }
 

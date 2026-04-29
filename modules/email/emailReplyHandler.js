@@ -27,7 +27,9 @@ const imapConfig = {
   host: 'imap.hostinger.com',
   port: 993,
   tls: true,
-  tlsOptions: { rejectUnauthorized: false }
+  tlsOptions: { rejectUnauthorized: false },
+  authTimeout: 10000,
+  connTimeout: 10000
 };
 
 /**

@@ -27,7 +27,7 @@ async function runFollowUpEngine() {
     const { data: emailLeads } = await supabase
       .from('leads')
       .select('*')
-      .eq('outreach_status', 'contactED')
+      .eq('outreach_status', 'contacted')
       .lte('last_contacted_at', twoDaysAgo);
 
     for (const lead of emailLeads || []) {

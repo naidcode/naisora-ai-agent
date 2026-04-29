@@ -95,29 +95,55 @@ async function sendDailyWhatsApp() {
     }
 
     const message = result.message;
+    const phone = lead.phone;
 
-    // INSERT into whatsapp_queue instead of sending directly
-    const { error } = await supabase.from('whatsapp_queue').insert({
-      lead_id: lead.id,
-      phone: lead.phone,
-      message: message,
-      status: 'pending'
-    });
-
-    if (!error) {
-      queued++;
-      await supabase
-        .from('leads')
-        .update({
-          outreach_status: 'whatsapp_sent',
-          outreach_channel: 'whatsapp',
-          whatsapp_count: (lead.whatsapp_count || 0) + 1,
-          last_contacted_at: new Date().toISOString(),
+    try {
+      console.log(`📤 Sending WhatsApp to ${lead.business_name} (${phone})...`);
+      
+      const url = `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE}/messages/chat`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          token: process.env.ULTRAMSG_TOKEN,
+          to: `+${phone.replace(/\D/g, '')}`,
+          body: message
         })
-        .eq('id', lead.id);
-    } else {
-      console.error(`❌ Failed to queue for ${lead.business_name}:`, error.message);
+      });
+
+      const resData = await response.json();
+
+      if (resData.sent === 'true' || resData.id) {
+        queued++; // Using 'queued' variable name to keep rest of code working, but it's actually sent
+        await supabase
+          .from('leads')
+          .update({
+            outreach_status: 'whatsapp_sent',
+            outreach_channel: 'whatsapp',
+            whatsapp_count: (lead.whatsapp_count || 0) + 1,
+            last_contacted_at: new Date().toISOString(),
+          })
+          .eq('id', lead.id);
+
+        // Log in outreach_log
+        await supabase.from('outreach_log').insert({
+          lead_id: lead.id,
+          channel: 'whatsapp',
+          message_text: message,
+          sent_at: new Date().toISOString(),
+          delivered: true
+        });
+
+        console.log(`   ✅ Sent via UltraMsg!`);
+      } else {
+        console.error(`   ❌ UltraMsg Error: ${resData.error || 'Unknown error'}`);
+      }
+    } catch (sendErr) {
+      console.error(`   ❌ Failed to send to ${lead.business_name}:`, sendErr.message);
     }
+
+    // Wait 10-20 seconds between sends
+    await new Promise(r => setTimeout(r, 15000));
   }
 
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -176,23 +202,51 @@ async function sendFollowUp() {
   for (let i = 0; i < leads.length; i++) {
     const lead = leads[i];
     const message = `Hi ${lead.business_name} 👋, just following up on my previous message. Did you get a chance to see the free audit I did for your website?`;
+    const phone = lead.phone;
 
-    const { error } = await supabase.from('whatsapp_queue').insert({
-      phone: lead.phone,
-      message: message,
-      status: 'pending'
-    });
-
-    if (!error) {
-      queued++;
-      await supabase
-        .from('leads')
-        .update({
-          outreach_status: 'followup_1',
-          last_contacted_at: new Date().toISOString(),
+    try {
+      console.log(`📤 Sending WhatsApp follow-up to ${lead.business_name} (${phone})...`);
+      
+      const url = `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE}/messages/chat`;
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          token: process.env.ULTRAMSG_TOKEN,
+          to: `+${phone.replace(/\D/g, '')}`,
+          body: message
         })
-        .eq('id', lead.id);
+      });
+
+      const resData = await response.json();
+
+      if (resData.sent === 'true' || resData.id) {
+        queued++;
+        await supabase
+          .from('leads')
+          .update({
+            outreach_status: 'followup_1',
+            last_contacted_at: new Date().toISOString(),
+          })
+          .eq('id', lead.id);
+
+        // Log in outreach_log
+        await supabase.from('outreach_log').insert({
+          lead_id: lead.id,
+          channel: 'whatsapp',
+          message_type: 'followup_1',
+          message_text: message,
+          sent_at: new Date().toISOString(),
+          delivered: true
+        });
+
+        console.log(`   ✅ Follow-up sent via UltraMsg!`);
+      }
+    } catch (sendErr) {
+      console.error(`   ❌ Follow-up failed for ${lead.business_name}:`, sendErr.message);
     }
+
+    await new Promise(r => setTimeout(r, 15000));
   }
 
   console.log(`✅ Follow-ups queued: ${queued}`);

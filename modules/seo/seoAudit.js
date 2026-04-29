@@ -17,7 +17,7 @@ if (fs.existsSync('.env')) {
   });
 }
 
-const puppeteer = require('puppeteer');
+const { launchBrowser } = require('../../config/puppeteer');
 const { fullAudit } = require('./pagespeedAudit');
 const { askClaudeSonnet } = require('../../config/claude');
 const { supabase } = require('../../config/database');
@@ -45,10 +45,7 @@ async function crawlOnPageSeo(url) {
   const { sendMessage } = require('../../config/telegram');
 
   try {
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    const browser = await launchBrowser();
 
     const page = await browser.newPage();
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });

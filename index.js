@@ -392,10 +392,50 @@ async function startAgent() {
     console.log("📱 You will receive Telegram alerts for all activity.\n");
     // Keep process alive on Railway
     // Keep alive + start HTTP
-const express = require('express')
-const app = express()
+const express = require('express');
+const app = express();
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.get('/status', (req, res) => res.json({ status: 'running', uptime: process.uptime() }))
 app.get('/ping', (req, res) => res.send('ok'))
+
+// ── UltraMsg Webhook Handler ──
+app.post('/webhooks/whatsapp', async (req, res) => {
+  try {
+    const data = req.body;
+    // UltraMsg format: data.data contains message details
+    // For 'chat' messages, data.event_type is 'message_received'
+    if (data.event_type === 'message_received') {
+      const msg = data.data;
+      if (msg && !msg.fromMe) {
+        const phone = msg.from.split('@')[0].replace(/\D/g, ''); // Clean phone
+        // Match phone with or without country code
+        // Simple logic: if phone starts with 91, also check without 91
+        const cleanPhone = phone.startsWith('91') && phone.length > 10 ? phone.substring(2) : phone;
+        
+        const text = msg.body;
+        console.log(`📩 Webhook: Message from ${phone}: ${text}`);
+
+        if (text) {
+          const { handleWhatsAppReply } = require('./modules/outreach/whatsappAutoReply');
+          const aiResponse = await handleWhatsAppReply(cleanPhone, text);
+          
+          if (aiResponse) {
+            const { sendUltraMsg } = require('./config/ultramsg');
+            await sendUltraMsg(phone, aiResponse);
+            console.log(`🤖 Auto-replied to ${phone}`);
+          }
+        }
+      }
+    }
+    res.status(200).send('ACK');
+  } catch (err) {
+    console.error('Webhook Error:', err.message);
+    res.status(500).send('Error');
+  }
+});
+
 app.listen(process.env.PORT || 3000, '0.0.0.0')
   } else {
     // Local: show interactive menu
