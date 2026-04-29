@@ -13,13 +13,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: 🚀 Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
           script: |
-            cd /home/${{ secrets.VPS_USER }}/Naisora-AI-Agent
+            # Check if directory exists, if not, find it or error out
+            if [ -d "/home/${{ secrets.VPS_USER }}/naisora-ai-agent" ]; then
+              cd "/home/${{ secrets.VPS_USER }}/naisora-ai-agent"
+            elif [ -d "/home/${{ secrets.VPS_USER }}/Naisora-AI-Agent" ]; then
+              cd "/home/${{ secrets.VPS_USER }}/Naisora-AI-Agent"
+            else
+              echo "❌ Error: Project directory not found in home folder!"
+              exit 1
+            fi
+            
             git pull origin main
             npm install --production
             pm2 restart all || pm2 start index.js --name "naisora-agent"
