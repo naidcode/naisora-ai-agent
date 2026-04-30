@@ -11,7 +11,7 @@ let imapFailureCount = 0;
 let lastImapFailureTime = 0;
 
 /**
- * Check Gmail IMAP for unread replies from leads and auto-reply using Claude
+ * Check Hostinger IMAP for unread replies from leads and auto-reply using Claude
  */
 async function handleEmailReplies() {
   const now = Date.now();
@@ -28,12 +28,11 @@ async function handleEmailReplies() {
 
   console.log('\n📧 --- Email Reply Handler (IMAP) Starting ---');
   
-  const user = process.env.GMAIL_USER || 'hello@naisora.com';
   const imapOptions = {
-    user: user,
-    password: process.env.GMAIL_APP_PASSWORD,
-    host: 'imap.gmail.com',
-    port: 993,
+    user: process.env.IMAP_USER || process.env.EMAIL_USER || 'hey@naisora.com',
+    password: process.env.IMAP_PASS || process.env.SMTP_PASS,
+    host: process.env.IMAP_HOST || 'imap.hostinger.com',
+    port: parseInt(process.env.IMAP_PORT) || 993,
     tls: true,
     tlsOptions: { rejectUnauthorized: false },
     connTimeout: 10000,
@@ -42,7 +41,7 @@ async function handleEmailReplies() {
   };
 
   if (!imapOptions.password) {
-    console.error('❌ GMAIL_APP_PASSWORD missing in .env. Skipping IMAP.');
+    console.error('❌ IMAP_PASS missing in .env. Skipping IMAP.');
     return;
   }
 
@@ -90,7 +89,7 @@ async function handleEmailReplies() {
       lastImapFailureTime = Date.now();
       
       if (imapFailureCount === 3) {
-        sendMessage(`⚠️ *IMAP CRITICAL FAILURE* — Gmail connection failed 3 times in a row. Paused for 30 minutes.\nError: ${err.message}`);
+        sendMessage(`⚠️ *IMAP CRITICAL FAILURE* — Hostinger connection failed 3 times in a row. Paused for 30 minutes.\nError: ${err.message}`);
       }
       
       resolve(); // Don't crash the scheduler
@@ -151,7 +150,7 @@ Their business: ${lead.business_name} in ${lead.area}`;
 
           const aiReply = await askClaudeWithSystem(systemPrompt, body);
 
-          // 3. Send reply via SMTP (Resend)
+          // 3. Send reply via SMTP (Hostinger)
           try {
             const { sendEmail } = require('../../config/smtp');
             await sendEmail(fromEmail, `Re: ${subject}`, aiReply);

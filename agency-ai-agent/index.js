@@ -45,11 +45,7 @@ const { runFollowUpEngine } = require("./modules/outreach/followUpEngine");
 const { isStopped, stopAgent, startAgent: resumeAgent } = require("./system/masterSwitch");
 
 // ─── Detect if running in Server Mode (no interactive menu) ─────────────
-const IS_SERVER =
-  process.env.SERVER_MODE === 'true' ||
-  process.env.NODE_ENV === 'production' ||
-  !!process.env.RAILWAY_ENVIRONMENT ||
-  !!process.env.RAILWAY_SERVICE_NAME;
+const IS_SERVER = process.env.SERVER_MODE === 'true';
 
 // ============================================
 // INTERACTIVE MENU (local only — skipped on Railway)

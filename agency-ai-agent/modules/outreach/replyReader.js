@@ -8,7 +8,9 @@ const { sendMessage } = require('../../config/telegram');
 const { sendUltraMsg } = require('../../config/ultramsg');
 
 // ─── Fetch messages from UltraMsg ───────────────────────────────────────────────
-async function fetchUltraMsgReplies() {
+async function checkReplies() {
+  console.log('\n📬 Checking WhatsApp replies via UltraMsg...');
+
   const instance = process.env.ULTRAMSG_INSTANCE;
   const token = process.env.ULTRAMSG_TOKEN;
   
@@ -18,7 +20,43 @@ async function fetchUltraMsgReplies() {
     const data = await response.json();
     
     // Filter for inbound messages only
-    return (data.messages || []).filter(m => m.fromMe === false && m.type === 'chat');
+    const replies = (data.messages || []).filter(m => m.fromMe === false && m.type === 'chat');
+
+    if (replies.length === 0) {
+      console.log('   No new replies found.');
+      return [];
+    }
+
+    console.log(`   Found ${replies.length} recent messages`);
+    const newReplies = [];
+
+    for (const message of replies) {
+      const alreadySaved = await replyAlreadySaved(message.id);
+      if (alreadySaved) continue;
+
+      const fromPhone = message.from.split('@')[0];
+      const lead = await matchReplyToLead(fromPhone);
+      if (!lead) {
+        console.log(`   ⚠️  Unknown number: ${fromPhone} — skipping`);
+        continue;
+      }
+
+      await saveReply(lead, message);
+      await triggerCallBooking(lead, message.body);
+
+      console.log(`   💬 Reply from ${lead.business_name}: "${message.body.substring(0, 60)}..."`);
+      newReplies.push({ lead, message: message.body });
+    }
+
+    if (newReplies.length > 0) {
+      console.log(`\n✅ Saved ${newReplies.length} new replies — triggering analyser...`);
+      const { analyseReply } = require('./replyAnalyser');
+      for (const { lead, message } of newReplies) {
+        await analyseReply(lead, message);
+      }
+    }
+
+    return newReplies;
   } catch (err) {
     console.error('UltraMsg fetch error:', err.message);
     return [];
@@ -97,49 +135,6 @@ async function triggerCallBooking(lead, replyText) {
     `⚡ Send this NOW:\n` +
     `_"I can show you exactly how to fix this in 10 minutes — when are you free today?"_`
   );
-}
-
-// ─── Main reply check function ────────────────────────────────────────────────
-async function checkReplies() {
-  console.log('\n📬 Checking WhatsApp replies via UltraMsg...');
-
-  const replies = await fetchUltraMsgReplies();
-
-  if (replies.length === 0) {
-    console.log('   No new replies found.');
-    return [];
-  }
-
-  console.log(`   Found ${replies.length} recent messages`);
-  const newReplies = [];
-
-  for (const message of replies) {
-    const alreadySaved = await replyAlreadySaved(message.id);
-    if (alreadySaved) continue;
-
-    const fromPhone = message.from.split('@')[0];
-    const lead = await matchReplyToLead(fromPhone);
-    if (!lead) {
-      console.log(`   ⚠️  Unknown number: ${fromPhone} — skipping`);
-      continue;
-    }
-
-    await saveReply(lead, message);
-    await triggerCallBooking(lead, message.body);
-
-    console.log(`   💬 Reply from ${lead.business_name}: "${message.body.substring(0, 60)}..."`);
-    newReplies.push({ lead, message: message.body });
-  }
-
-  if (newReplies.length > 0) {
-    console.log(`\n✅ Saved ${newReplies.length} new replies — triggering analyser...`);
-    const { analyseReply } = require('./replyAnalyser');
-    for (const { lead, message } of newReplies) {
-      await analyseReply(lead, message);
-    }
-  }
-
-  return newReplies;
 }
 
 module.exports = { checkReplies, triggerCallBooking };
