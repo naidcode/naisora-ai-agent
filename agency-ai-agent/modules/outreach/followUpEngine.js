@@ -7,6 +7,7 @@ const { supabase } = require('../../config/database');
 const { sendMessage: sendTelegram } = require('../../config/telegram');
 const { askClaudeSonnet } = require('../../config/claude');
 const { formatAuditForWhatsApp, buildFallbackAudit } = require('../../seo/miniAudit');
+const { sendUltraMsg } = require('../../config/ultramsg');
 
 // ─── Follow-up schedule (days after first contact) ───────────────────────────
 const FOLLOWUP_SCHEDULE = {
@@ -52,16 +53,12 @@ Rules:
   return `Hi ${lead.business_name || ''} — this is my last follow-up.\n\nThe free audit for your restaurant is still here if you want it. It shows exactly which Google searches you're missing and what it would take to fix.\n\nNo pressure — just let me know. — Nahid, Naisora`;
 }
 
-// ─── Send a follow-up via WhatsApp (Twilio) ──────────────────────────────────
-async function sendFollowUpMessage(lead, followupStage, twilioClient) {
+// ─── Send a follow-up via WhatsApp (UltraMsg) ──────────────────────────────────
+async function sendFollowUpMessage(lead, followupStage) {
   const message = await writeFollowUpMessage(lead, followupStage);
 
   try {
-    const result = await twilioClient.messages.create({
-      from: process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886',
-      to: `whatsapp:${lead.phone}`,
-      body: message,
-    });
+    const result = await sendUltraMsg(lead.phone, message);
 
     // Log it
     await supabase.from('outreach_log').insert({
@@ -71,7 +68,7 @@ async function sendFollowUpMessage(lead, followupStage, twilioClient) {
       message_text: message,
       sent_at: new Date().toISOString(),
       delivered: true,
-      twilio_sid: result.sid,
+      external_msg_id: result.id || 'ultramsg',
     });
 
     // Update lead status
@@ -83,6 +80,10 @@ async function sendFollowUpMessage(lead, followupStage, twilioClient) {
       .eq('id', lead.id);
 
     console.log(`   ✅ ${FOLLOWUP_SCHEDULE[followupStage].label} sent → ${lead.business_name}`);
+    
+    // Telegram Alert for visibility
+    await sendTelegram(`📱 WhatsApp follow-up sent to ${lead.business_name} (${FOLLOWUP_SCHEDULE[followupStage].label})`);
+    
     return { success: true };
   } catch (err) {
     console.error(`   ❌ Follow-up failed → ${lead.business_name}: ${err.message}`);
@@ -93,14 +94,6 @@ async function sendFollowUpMessage(lead, followupStage, twilioClient) {
 // ─── Main runner — determine which leads need which follow-up today ──────────
 async function runFollowUpEngine() {
   console.log('\n🔄 [FollowUpEngine] Checking who needs follow-up today...');
-
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-    console.log('⚠️  Twilio credentials missing — skipping follow-ups');
-    return { sent: 0, skipped: 0 };
-  }
-
-  const twilio = require('twilio');
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
 
   const now = new Date();
   let sent = 0;
@@ -128,10 +121,10 @@ async function runFollowUpEngine() {
     console.log(`   ${config.label}: ${leads.length} leads need follow-up`);
 
     for (const lead of leads) {
-      const result = await sendFollowUpMessage(lead, stage, client);
+      const result = await sendFollowUpMessage(lead, stage);
       result.success ? sent++ : skipped++;
       // Small delay between messages
-      await new Promise(r => setTimeout(r, 30000)); // 30 seconds
+      await new Promise(r => setTimeout(r, 10000)); // 10 seconds
     }
   }
 

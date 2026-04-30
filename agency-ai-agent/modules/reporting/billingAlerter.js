@@ -10,7 +10,7 @@ const SUBSCRIPTIONS = [
   { name: 'Google Workspace', cost: 125, renewalDay: 1 },
   { name: 'Domain (naisora.com)', cost: 83, renewalDay: 15 },
   { name: 'Railway.app', cost: 0, renewalDay: 1, note: 'Free tier — monitor usage' },
-  { name: 'Twilio WhatsApp', cost: 500, renewalDay: 1, note: 'Pay as you go' },
+  { name: 'UltraMsg WhatsApp', cost: 2500, renewalDay: 1, note: 'Monthly subscription' },
 ];
 
 async function checkUpcomingRenewals() {
@@ -39,8 +39,8 @@ async function weeklyCostSummary() {
     `💰 *Monthly Cost Summary — Naisora*\n\n` +
     SUBSCRIPTIONS.map(s => `• ${s.name}: ₹${s.cost}`).join('\n') +
     `\n\nTotal fixed costs: ₹${totalMonthly}/month\n` +
-    `Variable: Claude API (~₹500), Twilio (~₹500)\n` +
-    `Total estimate: ₹${totalMonthly + 1000}/month\n\n` +
+    `Variable: Claude API (~₹500)\n` +
+    `Total estimate: ₹${totalMonthly + 500}/month\n\n` +
     `Break-even: 1 client paying ₹3,500/month`
   );
 }

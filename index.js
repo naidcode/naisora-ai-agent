@@ -4,18 +4,7 @@
 // Command: node index.js
 // ============================================
 
-// Load .env directly — dotenv was adding hidden \r characters to keys
-const fs = require('fs');
-if (fs.existsSync('.env')) {
-  const envContent = fs.readFileSync('.env', 'utf8');
-  envContent.split('\n').forEach(line => {
-    const [key, ...rest] = line.split('=');
-    if (key && rest.length && !key.trim().startsWith('#')) {
-      process.env[key.trim()] = rest.join('=').replace(/\r/g, '').trim();
-    }
-  });
-}
-
+require('dotenv').config();
 
 const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
@@ -58,9 +47,9 @@ const { isStopped, stopAgent, startAgent: resumeAgent } = require("./system/mast
 // ─── Detect if running in Server Mode (no interactive menu) ─────────────
 const IS_SERVER =
   process.env.SERVER_MODE === 'true' ||
+  process.env.NODE_ENV === 'production' ||
   !!process.env.RAILWAY_ENVIRONMENT ||
-  !!process.env.RAILWAY_SERVICE_NAME ||
-  !!process.env.RAILWAY_PROJECT_ID;
+  !!process.env.RAILWAY_SERVICE_NAME;
 
 // ============================================
 // INTERACTIVE MENU (local only — skipped in server mode)

@@ -17,32 +17,10 @@ if (fs.existsSync('.env')) {
 const { supabase } = require('../../config/database');
 const { askClaudeWithSystem } = require('../../config/claude');
 const { sendMessage } = require('../../config/telegram');
-const { google } = require('googleapis');
 
 // Failure tracking
 let imapFailureCount = 0;
 let lastImapFailureTime = 0;
-
-/**
- * Get OAuth2 access token for Gmail
- */
-async function getGmailAccessToken() {
-  try {
-    const oauth2Client = new google.auth.OAuth2(
-      process.env.GMAIL_CLIENT_ID,
-      process.env.GMAIL_CLIENT_SECRET,
-      process.env.GMAIL_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
-    );
-    oauth2Client.setCredentials({
-      refresh_token: process.env.GMAIL_REFRESH_TOKEN
-    });
-    const { token } = await oauth2Client.getAccessToken();
-    return token;
-  } catch (err) {
-    console.error('❌ Failed to get Gmail Access Token:', err.message);
-    return null;
-  }
-}
 
 /**
  * Check Gmail IMAP for unread replies from leads and auto-reply using Claude
@@ -65,6 +43,7 @@ async function handleEmailReplies() {
   const user = process.env.GMAIL_USER || 'hello@naisora.com';
   const imapOptions = {
     user: user,
+    password: process.env.GMAIL_APP_PASSWORD,
     host: 'imap.gmail.com',
     port: 993,
     tls: true,
@@ -74,23 +53,8 @@ async function handleEmailReplies() {
     socketTimeout: 10000
   };
 
-  // Auth Method: App Password or OAuth2
-  if (process.env.GMAIL_APP_PASSWORD) {
-    imapOptions.password = process.env.GMAIL_APP_PASSWORD;
-  } else if (process.env.GMAIL_REFRESH_TOKEN) {
-    const accessToken = await getGmailAccessToken();
-    if (accessToken) {
-      // For node-imap, xoauth2 is a base64 encoded string
-      const authString = `user=${user}\x01auth=Bearer ${accessToken}\x01\x01`;
-      imapOptions.xoauth2 = Buffer.from(authString).toString('base64');
-    } else {
-      console.error('❌ OAuth2 fallback failed: No access token.');
-      imapFailureCount++;
-      lastImapFailureTime = Date.now();
-      return;
-    }
-  } else {
-    console.error('❌ No Gmail credentials found (GMAIL_APP_PASSWORD or OAuth tokens).');
+  if (!imapOptions.password) {
+    console.error('❌ GMAIL_APP_PASSWORD missing in .env. Skipping IMAP.');
     return;
   }
 

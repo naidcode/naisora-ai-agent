@@ -1,19 +1,7 @@
 // modules/outreach/replyReader.js
 // Naisora AI Agent — WhatsApp Reply Reader
-// Checks Twilio every 2 hours for incoming WhatsApp replies
+// Checks UltraMsg for incoming WhatsApp replies
 // Saves new replies to Supabase, triggers replyAnalyser + call booking automatically
-
-const fs = require('fs');
-if (fs.existsSync('.env')) {
-  const envContent = fs.readFileSync('.env', 'utf8');
-  envContent.split('\n').forEach(line => {
-    const cleaned = line.replace(/\r/g, '').trim();
-    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
-      const [key, ...rest] = cleaned.split('=');
-      process.env[key.trim()] = rest.join('=').trim();
-    }
-  });
-}
 
 const { supabase } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');

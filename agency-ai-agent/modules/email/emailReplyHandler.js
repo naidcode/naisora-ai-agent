@@ -2,41 +2,51 @@ const Imap = require('imap');
 const { simpleParser } = require('mailparser');
 const fs = require('fs');
 
-// Load .env directly
-if (fs.existsSync('.env')) {
-  const envContent = fs.readFileSync('.env', 'utf8');
-  envContent.split('\n').forEach(line => {
-    const cleaned = line.replace(/\r/g, '').trim();
-    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
-      const [key, ...rest] = cleaned.split('=');
-      process.env[key.trim()] = rest.join('=').trim();
-    }
-  });
-}
-
 const { supabase } = require('../../config/database');
 const { askClaudeWithSystem } = require('../../config/claude');
-const { Resend } = require('resend');
 const { sendMessage } = require('../../config/telegram');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const imapConfig = {
-  user: 'hey@naisora.com',
-  password: process.env.SMTP_PASS,
-  host: 'imap.hostinger.com',
-  port: 993,
-  tls: true,
-  tlsOptions: { rejectUnauthorized: false }
-};
+// Failure tracking
+let imapFailureCount = 0;
+let lastImapFailureTime = 0;
 
 /**
- * Check Hostinger IMAP for unread replies from leads and auto-reply using Claude
+ * Check Gmail IMAP for unread replies from leads and auto-reply using Claude
  */
 async function handleEmailReplies() {
+  const now = Date.now();
+  if (imapFailureCount >= 3) {
+    const minutesSinceFailure = (now - lastImapFailureTime) / (1000 * 60);
+    if (minutesSinceFailure < 30) {
+      console.log(`⏭️  Skipping Email Reply Handler (Paused for ${Math.round(30 - minutesSinceFailure)} more mins due to 3 consecutive failures)`);
+      return;
+    } else {
+      console.log('🔄 30 minutes passed. Resetting IMAP failure count.');
+      imapFailureCount = 0;
+    }
+  }
+
   console.log('\n📧 --- Email Reply Handler (IMAP) Starting ---');
   
-  const imap = new Imap(imapConfig);
+  const user = process.env.GMAIL_USER || 'hello@naisora.com';
+  const imapOptions = {
+    user: user,
+    password: process.env.GMAIL_APP_PASSWORD,
+    host: 'imap.gmail.com',
+    port: 993,
+    tls: true,
+    tlsOptions: { rejectUnauthorized: false },
+    connTimeout: 10000,
+    authTimeout: 10000,
+    socketTimeout: 10000
+  };
+
+  if (!imapOptions.password) {
+    console.error('❌ GMAIL_APP_PASSWORD missing in .env. Skipping IMAP.');
+    return;
+  }
+
+  const imap = new Imap(imapOptions);
 
   return new Promise((resolve, reject) => {
     imap.once('ready', () => {
@@ -46,7 +56,6 @@ async function handleEmailReplies() {
           return reject(err);
         }
 
-        // Search for unread messages
         imap.search(['UNSEEN'], async (err, results) => {
           if (err) {
             imap.end();
@@ -62,7 +71,11 @@ async function handleEmailReplies() {
           console.log(`   Found ${results.length} unread emails. Processing...`);
 
           for (const uid of results) {
-            await processMessage(imap, uid);
+            try {
+              await processMessage(imap, uid);
+            } catch (processErr) {
+              console.error(`   ❌ Error processing message UID ${uid}:`, processErr.message);
+            }
           }
 
           imap.end();
@@ -72,8 +85,15 @@ async function handleEmailReplies() {
     });
 
     imap.once('error', (err) => {
-      console.error('IMAP Error:', err);
-      reject(err);
+      console.error('❌ IMAP Connection Error:', err.message);
+      imapFailureCount++;
+      lastImapFailureTime = Date.now();
+      
+      if (imapFailureCount === 3) {
+        sendMessage(`⚠️ *IMAP CRITICAL FAILURE* — Gmail connection failed 3 times in a row. Paused for 30 minutes.\nError: ${err.message}`);
+      }
+      
+      resolve(); // Don't crash the scheduler
     });
 
     imap.once('end', () => {
@@ -106,18 +126,14 @@ async function processMessage(imap, uid) {
 
           if (!lead) {
             console.log(`   ⏩ Skipping email from unknown sender: ${fromEmail}`);
-            // Mark as seen anyway? Or leave it? Usually better to mark as seen if it's not a lead to avoid reprocessing.
-            imap.addFlags(uid, ['\\Seen'], (err) => {
-              if (err) console.error('Error marking as seen:', err);
-            });
-            return resolve();
+            imap.addFlags(uid, ['\\Seen'], (err) => resolve());
+            return;
           }
 
           console.log(`   🎯 Match found! Lead: ${lead.business_name}`);
 
           // 2. Generate Claude Haiku response
           const systemPrompt = `You are Nahid from Naisora, a web design agency in Bangalore that builds websites and does SEO for restaurants and cafes.
-
 You are replying to a restaurant owner on EMAIL who responded to your cold outreach.
 
 Rules:
@@ -131,25 +147,19 @@ Rules:
 - If not interested: be polite, wish them well, stop messaging
 - If interested: offer to send audit or book a call
 
-Their lead type: ${lead.lead_type || 'unknown'}
 Their business: ${lead.business_name} in ${lead.area}`;
 
           const aiReply = await askClaudeWithSystem(systemPrompt, body);
 
-          // 3. Send reply via Resend
-          const { data, error: sendError } = await resend.emails.send({
-            from: 'Nahid from Naisora <hey@naisora.com>',
-            to: [fromEmail],
-            subject: `Re: ${subject}`,
-            text: aiReply,
-          });
-
-          if (sendError) {
+          // 3. Send reply via SMTP (Resend)
+          try {
+            const { sendEmail } = require('../../config/smtp');
+            await sendEmail(fromEmail, `Re: ${subject}`, aiReply);
+            console.log(`   ✅ Sent auto-reply to ${lead.business_name}`);
+          } catch (sendError) {
             console.error(`   ❌ Failed to send email reply to ${fromEmail}:`, sendError.message);
             return resolve();
           }
-
-          console.log(`   ✅ Sent auto-reply to ${lead.business_name}`);
 
           // 4. Log to outreach_log
           await supabase.from('outreach_log').insert([
@@ -183,27 +193,18 @@ Their business: ${lead.business_name} in ${lead.area}`;
             `🔔 *NEW REPLY — Email*\n\n` +
             `👤 *Business:* ${lead.business_name}\n` +
             `📍 *Area:* ${lead.area}\n` +
-            `💬 *Their message:* ${body.substring(0, 500)}${body.length > 500 ? '...' : ''}\n` +
-            `🤖 *Our auto reply:* ${aiReply}\n` +
-            `📊 *Lead type:* ${lead.lead_type}\n` +
-            `🌡️ *Status:* ${lead.lead_category || 'hot'}`
+            `💬 *Their message:* ${body.substring(0, 500)}${body.length > 500 ? '...' : ''}\n\n` +
+            `🤖 *Our auto reply:* ${aiReply}`
           );
 
           // 7. Mark as seen in IMAP
-          imap.addFlags(uid, ['\\Seen'], (err) => {
-            if (err) console.error('Error marking as seen:', err);
-            resolve();
-          });
+          imap.addFlags(uid, ['\\Seen'], (err) => resolve());
 
         } catch (parseErr) {
           console.error('Error parsing email:', parseErr);
           resolve();
         }
       });
-    });
-    f.once('error', (err) => {
-      console.error('Fetch error:', err);
-      resolve();
     });
   });
 }

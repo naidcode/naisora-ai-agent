@@ -1,95 +1,57 @@
 // config/smtp.js
-// Naisora AI Agent — Gmail SMTP Config (Nodemailer)
+// Naisora AI Agent — Resend Email Config (API Only)
 
-const nodemailer = require('nodemailer');
-const { google } = require('googleapis');
-const fs = require('fs');
-
-// Load .env directly
-if (fs.existsSync('.env')) {
-  const envContent = fs.readFileSync('.env', 'utf8');
-  envContent.split('\n').forEach(line => {
-    const cleaned = line.replace(/\r/g, '').trim();
-    if (cleaned && !cleaned.startsWith('#') && cleaned.includes('=')) {
-      const [key, ...rest] = cleaned.split('=');
-      process.env[key.trim()] = rest.join('=').trim();
-    }
-  });
-}
+const { Resend } = require('resend');
 
 /**
- * Create a transporter using either App Password or OAuth2
+ * Initialize Resend client
+ * Uses RESEND_API_KEY from .env
  */
-async function createTransporter() {
-  const user = process.env.GMAIL_USER || process.env.GMAIL_EMAIL || 'hello@naisora.com';
-  
-  // Method 1: App Password
-  if (process.env.GMAIL_APP_PASSWORD) {
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: user,
-        pass: process.env.GMAIL_APP_PASSWORD
-      }
-    });
-  }
-  
-  // Method 2: OAuth2
-  if (process.env.GMAIL_CLIENT_ID && process.env.GMAIL_REFRESH_TOKEN) {
-    return nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        type: 'OAuth2',
-        user: user,
-        clientId: process.env.GMAIL_CLIENT_ID,
-        clientSecret: process.env.GMAIL_CLIENT_SECRET,
-        refreshToken: process.env.GMAIL_REFRESH_TOKEN
-      }
-    });
-  }
-
-  throw new Error('No Gmail credentials found (GMAIL_APP_PASSWORD or OAuth tokens).');
-}
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
- * Sends an email using Gmail SMTP
+ * Sends an email using Resend API
  * @param {string} to - Recipient email
  * @param {string} subject - Email subject
- * @param {string} html - Email body (HTML or plain text)
+ * @param {string} html - Email body (HTML)
  */
 async function sendEmail(to, subject, html) {
   try {
-    const transporter = await createTransporter();
-    const fromUser = process.env.GMAIL_USER || 'hello@naisora.com';
-    
-    const info = await transporter.sendMail({
-      from: `"Nahid from Naisora" <${fromUser}>`,
-      to,
-      subject,
-      text: html.replace(/<[^>]*>?/gm, ''), // Simple text fallback
+    const { data, error } = await resend.emails.send({
+      from: 'Nahid from Naisora <hello@naisora.com>',
+      to: to,
+      subject: subject,
       html: html
     });
     
-    return info;
+    if (error) {
+      console.error('❌ Resend Error:', error.message);
+      throw new Error(error.message);
+    }
+    
+    return data;
   } catch (error) {
-    console.error('❌ Gmail SMTP Error:', error.message);
+    console.error('❌ Email Sending Failed (Resend):', error.message);
     throw error;
   }
 }
 
 /**
- * Tests the Gmail connection
+ * Tests the Resend API connection
  */
 async function testConnection() {
-  try {
-    const transporter = await createTransporter();
-    await transporter.verify();
-    console.log('✅ Email connected via Gmail SMTP');
-    return true;
-  } catch (error) {
-    console.error('❌ Gmail Connection Failed:', error.message);
+  if (!process.env.RESEND_API_KEY) {
+    console.error('❌ RESEND_API_KEY missing in .env');
     return false;
   }
+  
+  if (!process.env.RESEND_API_KEY.startsWith('re_')) {
+    console.error('❌ Invalid RESEND_API_KEY — must start with re_');
+    return false;
+  }
+
+  console.log('✅ Email connected via Resend API');
+  return true;
 }
 
 module.exports = { 

@@ -4,18 +4,7 @@
 // Command: node index.js
 // ============================================
 
-// Load .env directly — dotenv was adding hidden \r characters to keys
-const fs = require('fs');
-if (fs.existsSync('.env')) {
-  const envContent = fs.readFileSync('.env', 'utf8');
-  envContent.split('\n').forEach(line => {
-    const [key, ...rest] = line.split('=');
-    if (key && rest.length && !key.trim().startsWith('#')) {
-      process.env[key.trim()] = rest.join('=').replace(/\r/g, '').trim();
-    }
-  });
-}
-
+require('dotenv').config();
 
 const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
@@ -55,11 +44,12 @@ const { selectBestLeads } = require("./brain/leadSelector");
 const { runFollowUpEngine } = require("./modules/outreach/followUpEngine");
 const { isStopped, stopAgent, startAgent: resumeAgent } = require("./system/masterSwitch");
 
-// ─── Detect if running on Railway (no interactive menu on server) ─────────────
-const IS_RAILWAY =
+// ─── Detect if running in Server Mode (no interactive menu) ─────────────
+const IS_SERVER =
+  process.env.SERVER_MODE === 'true' ||
+  process.env.NODE_ENV === 'production' ||
   !!process.env.RAILWAY_ENVIRONMENT ||
-  !!process.env.RAILWAY_SERVICE_NAME ||
-  !!process.env.RAILWAY_PROJECT_ID;
+  !!process.env.RAILWAY_SERVICE_NAME;
 
 // ============================================
 // INTERACTIVE MENU (local only — skipped on Railway)
@@ -284,8 +274,8 @@ async function startAgent() {
   console.log("║   AI-Powered Web Design Agency Bot     ║");
   console.log("╚════════════════════════════════════════╝\n");
 
-  if (IS_RAILWAY) {
-    console.log("☁️  Running on Railway — server mode (no interactive menu)\n");
+  if (IS_SERVER) {
+    console.log("☁️  Running in SERVER MODE — scheduler active\n");
   } else {
     console.log("💻 Running locally\n");
   }
@@ -384,13 +374,13 @@ async function startAgent() {
   console.log("─".repeat(42));
   console.log("\n🤖 Naisora Agent is live.\n");
 
-  // ── On Railway: keep process alive, no interactive menu ──
-  if (IS_RAILWAY) {
+  // ── On Server: keep process alive, no interactive menu ──
+  if (IS_SERVER) {
     console.log(
-      "☁️  Railway mode — cron jobs running, waiting for scheduled tasks...",
+      "☁️  Server mode — cron jobs running, waiting for scheduled tasks...",
     );
     console.log("📱 You will receive Telegram alerts for all activity.\n");
-    // Keep process alive on Railway
+    // Keep process alive
     // Keep alive + start HTTP
 const express = require('express')
 const app = express()
