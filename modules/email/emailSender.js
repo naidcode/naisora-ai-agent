@@ -89,14 +89,13 @@ async function sendDailyColdEmails() {
         };
       }
       
-      console.log(`📧 Subject: ${email.subject}`);
+      const cleanSubject = email.subject.replace(/[\r\n]/g, ' ').replace(/^Subject:\s*/i, '').trim();
+      console.log(`📧 Subject: ${cleanSubject}`);
       console.log(`📤 Sending to: ${emailAddress}...`);
       
-      await sendEmail(emailAddress, email.subject, email.body);
+      await sendEmail(emailAddress, cleanSubject, email.body);
       
-      await updateLeadStatus(lead.id, STATUS.CONTACTED, {
-        email_subject: email.subject,
-      });
+      await updateLeadStatus(lead.id, STATUS.CONTACTED);
       
       await logOutreach(lead.id, 'email', 'cold', email.body, {
         subject: email.subject

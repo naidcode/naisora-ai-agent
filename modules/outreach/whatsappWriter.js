@@ -33,7 +33,12 @@ Tone: casual, friendly, Indian. Like texting a business owner.
 Sign off as Nahid, Naisora.
 Max 50 words.`;
   } else {
-    return null;
+    prompt = `Write a short WhatsApp cold message to ${lead.business_name} restaurant owner in ${area}, Bangalore.
+They have a digital presence but could improve their professional brand image and visibility.
+Offer: free website and local search audit.
+Tone: casual, friendly, Indian. Like texting a business owner.
+Sign off as Nahid, Naisora.
+Max 50 words.`;
   }
 
   try {

@@ -344,9 +344,12 @@ Tone: casual, warm, natural Instagram style. Not salesy.
 Sign as Nahid from Naisora.
 Max 40 words.`;
       } else {
-        console.log(`   ⏭️  Lead type skip — skipping`);
-        skipped++;
-        continue;
+        prompt = `Write a short Instagram DM to ${lead.business_name} restaurant in ${area} Bangalore.
+They have a digital presence but could improve their professional brand image and visibility.
+Offer: free website and local search audit.
+Tone: casual, warm, natural Instagram style. Not salesy.
+Sign as Nahid from Naisora.
+Max 40 words.`;
       }
 
       const message = await askClaude(prompt);

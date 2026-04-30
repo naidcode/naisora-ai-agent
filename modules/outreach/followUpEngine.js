@@ -1,4 +1,4 @@
-const { supabase } = require('../../config/database');
+const { supabase, STATUS } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
 const { askClaude } = require('../../config/claude');
 const { sendEmail } = require('../../config/smtp');
@@ -27,7 +27,7 @@ async function runFollowUpEngine() {
     const { data: emailLeads } = await supabase
       .from('leads')
       .select('*')
-      .eq('outreach_status', 'contacted')
+      .eq('outreach_status', STATUS.CONTACTED)
       .lte('last_contacted_at', twoDaysAgo);
 
     for (const lead of emailLeads || []) {
@@ -40,7 +40,7 @@ Sign as Nahid.`;
       await sendEmail(lead.email, `Checking in: ${lead.business_name}`, message);
       
       await supabase.from('leads').update({
-        outreach_status: 'followup_1',
+        outreach_status: STATUS.FOLLOWUP_1,
         last_contacted_at: new Date().toISOString()
       }).eq('id', lead.id);
 
@@ -52,7 +52,7 @@ Sign as Nahid.`;
     const { data: waLeads } = await supabase
       .from('leads')
       .select('*')
-      .eq('outreach_status', 'whatsapp_sent')
+      .eq('outreach_status', STATUS.WHATSAPP_SENT)
       .lte('last_contacted_at', twoDaysAgo);
 
     for (const lead of waLeads || []) {
@@ -71,7 +71,7 @@ Max 2 lines.`;
       });
 
       await supabase.from('leads').update({
-        outreach_status: 'whatsapp_followup_1',
+        outreach_status: STATUS.WHATSAPP_FOLLOWUP_1,
         last_contacted_at: new Date().toISOString()
       }).eq('id', lead.id);
 
@@ -83,7 +83,7 @@ Max 2 lines.`;
     const { data: igLeads } = await supabase
       .from('leads')
       .select('*')
-      .eq('outreach_status', 'instagram_dm_sent')
+      .eq('outreach_status', STATUS.INSTAGRAM_SENT)
       .lte('last_contacted_at', twoDaysAgo);
 
     const { loginInstagram } = require('./instagramOutreach');
@@ -96,7 +96,7 @@ Max 2 lines.`;
     const { data: liLeads } = await supabase
       .from('leads')
       .select('*')
-      .eq('outreach_status', 'linkedin_sent')
+      .eq('outreach_status', STATUS.LINKEDIN_SENT)
       .lte('last_contacted_at', twoDaysAgo);
 
     // [IG and LI follow-up implementation skipped here for simplicity in this artifact, 

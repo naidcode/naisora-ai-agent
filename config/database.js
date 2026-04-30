@@ -30,14 +30,20 @@ const supabase = createClient(
 // ============================================
 const STATUS = {
   NEW: 'new',                     // Just scraped, not contacted yet
+  PENDING: 'pending',             // Waiting for processing
   CONTACTED: 'contacted',         // First email sent
   FOLLOWUP_1: 'followup_1',       // Day 3 follow-up sent
   FOLLOWUP_2: 'followup_2',       // Day 7 follow-up sent
   FOLLOWUP_SENT: 'follow_up_sent', // Auto follow-up from scraper check-in
+  WHATSAPP_SENT: 'whatsapp_sent',  // First WhatsApp sent
+  WHATSAPP_FOLLOWUP_1: 'whatsapp_followup_1', // Day 2 WhatsApp follow-up
+  INSTAGRAM_SENT: 'instagram_dm_sent',
+  LINKEDIN_SENT: 'linkedin_sent',
   REPLIED: 'replied',             // They replied to us
   INTERESTED: 'interested',       // 🔥 HOT LEAD — they want to talk
   NOT_INTERESTED: 'not_interested', // They said no
   CLIENT: 'client',               // Deal closed, they're a client now
+  SKIPPED: 'skipped',             // Lead was not suitable
 };
 
 // ============================================

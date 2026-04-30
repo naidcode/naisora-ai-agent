@@ -85,7 +85,7 @@ Max 8 words. No clickbait. Professional and curiosity-driven.`;
   ]);
 
   return {
-    subject: subject.replace(/"/g, '').trim(),
+    subject: subject.replace(/"/g, '').replace(/[\r\n]/g, ' ').replace(/^Subject:\s*/i, '').trim(),
     body: body.trim(),
     lead_id: lead.id,
     lead_type: leadType
@@ -129,7 +129,7 @@ async function writeFollowUpEmail(lead, followUpDay) {
   BODY: [Email]`;
 
   const text = await askClaude(prompt, 400);
-  const subjectMatch = text.match(/SUBJECT:\s*(.+)/);
+  const subjectMatch = text.match(/SUBJECT:\s*(.+)/i);
   const bodyMatch = text.match(/BODY:\s*([\s\S]+)/);
 
   return {

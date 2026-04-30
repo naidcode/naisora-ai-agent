@@ -1,7 +1,7 @@
 // modules/outreach/whatsappSender.js
 // Naisora AI Agent — WhatsApp Sender (Queue Mode for Railway)
 
-const { supabase } = require('../../config/database');
+const { supabase, STATUS } = require('../../config/database');
 const { sendMessage } = require('../../config/telegram');
 
 const DAILY_LIMIT = 25;
@@ -56,8 +56,8 @@ async function sendDailyWhatsApp() {
     .from('leads')
     .select('*')
     .eq('lead_category', 'hot')
-    .neq('outreach_status', 'whatsapp_sent')
-    .neq('outreach_status', 'skipped')
+    .neq('outreach_status', STATUS.WHATSAPP_SENT)
+    .neq('outreach_status', STATUS.SKIPPED)
     .not('phone', 'is', null)
     .order('lead_score', { ascending: false })
     .limit(remaining);
@@ -119,7 +119,7 @@ async function sendDailyWhatsApp() {
         await supabase
           .from('leads')
           .update({
-            outreach_status: 'whatsapp_sent',
+            outreach_status: STATUS.WHATSAPP_SENT,
             outreach_channel: 'whatsapp',
             whatsapp_count: (lead.whatsapp_count || 0) + 1,
             last_contacted_at: new Date().toISOString(),
@@ -190,7 +190,7 @@ async function sendFollowUp() {
   const { data: leads } = await supabase
     .from('leads')
     .select('*')
-    .eq('outreach_status', 'whatsapp_sent')
+    .eq('outreach_status', STATUS.WHATSAPP_SENT)
     .lt('last_contacted_at', threeDaysAgo.toISOString())
     .limit(remaining);
 
@@ -227,7 +227,7 @@ async function sendFollowUp() {
         await supabase
           .from('leads')
           .update({
-            outreach_status: 'followup_1',
+            outreach_status: STATUS.FOLLOWUP_1,
             last_contacted_at: new Date().toISOString(),
           })
           .eq('id', lead.id);

@@ -274,9 +274,12 @@ Tone: professional but warm. LinkedIn style.
 Sign as Nahid, Founder at Naisora.
 Max 60 words.`;
       } else {
-        console.log(`   ⏭️  Lead type skip — skipping`);
-        skipped++;
-        continue;
+        prompt = `Write a short LinkedIn message to the owner of ${lead.business_name} restaurant in ${area} Bangalore.
+They have a digital presence but could improve their professional brand image and visibility.
+Offer: free website and local search audit.
+Tone: professional but warm. LinkedIn style.
+Sign as Nahid, Founder at Naisora.
+Max 60 words.`;
       }
 
       const message = await askClaude(prompt);
