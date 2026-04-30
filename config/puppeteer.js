@@ -21,13 +21,14 @@ async function launchBrowser() {
     ]
   };
 
-  // If not on linux and no env path, delete executablePath to use bundled chromium
-  if (process.platform !== 'linux' && !process.env.PUPPETEER_EXECUTABLE_PATH) {
+  // If path doesn't exist (e.g. on Windows local), delete it to use bundled chromium
+  if (options.executablePath && !fs.existsSync(options.executablePath)) {
     delete options.executablePath;
-  } else if (process.platform === 'linux' && !fs.existsSync(options.executablePath)) {
-     // Fallback for some linux distros
-     const fallbackPath = '/usr/bin/google-chrome';
-     if (fs.existsSync(fallbackPath)) options.executablePath = fallbackPath;
+  }
+
+  // If not on linux and no executablePath, ensure it's deleted
+  if (process.platform !== 'linux' && !options.executablePath) {
+    delete options.executablePath;
   }
 
   return await puppeteer.launch(options);

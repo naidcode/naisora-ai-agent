@@ -22,7 +22,17 @@ async function testInstagramDM() {
     
     // Navigate directly to DM page
     await page.goto(`https://www.instagram.com/direct/new/`, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 5000));
+
+    // Handle popups
+    const notNowBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'));
+      return btns.find(b => b.textContent.includes('Not Now'));
+    });
+    if (notNowBtn && notNowBtn.asElement()) {
+      await notNowBtn.asElement().click();
+      await new Promise(r => setTimeout(r, 2000));
+    }
 
     // Search for user
     const searchInput = await page.waitForSelector('input[placeholder="Search..."], input[name="queryBox"]', { timeout: 15000 });

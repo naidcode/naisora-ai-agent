@@ -143,7 +143,17 @@ async function sendInstagramDM(page, username, message, leadId = null) {
   try {
     // Navigate directly to DM page instead of clicking buttons
     await page.goto(`https://www.instagram.com/direct/new/`, { waitUntil: 'networkidle2', timeout: 30000 });
-    await new Promise(r => setTimeout(r, 2000));
+    await new Promise(r => setTimeout(r, 5000));
+
+    // Handle "Turn on Notifications" or other popups
+    const notNowBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'));
+      return btns.find(b => b.textContent.includes('Not Now'));
+    });
+    if (notNowBtn && notNowBtn.asElement()) {
+      await notNowBtn.asElement().click();
+      await new Promise(r => setTimeout(r, 2000));
+    }
 
     // Search for user
     console.log(`   🔍 Searching for @${username}...`);
