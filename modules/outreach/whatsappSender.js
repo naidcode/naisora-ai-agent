@@ -98,7 +98,8 @@ async function sendDailyWhatsApp() {
     const phone = lead.phone;
 
     try {
-      console.log(`📤 Sending WhatsApp to ${lead.business_name} (${phone})...`);
+      console.log(`\n📱 [${i + 1}/${leads.length}] Processing: ${lead.business_name} (${phone})`);
+      console.log(`📤 Sending WhatsApp to ${lead.business_name}...`);
       
       const url = `https://api.ultramsg.com/${process.env.ULTRAMSG_INSTANCE}/messages/chat`;
       const response = await fetch(url, {
@@ -114,7 +115,7 @@ async function sendDailyWhatsApp() {
       const resData = await response.json();
 
       if (resData.sent === 'true' || resData.id) {
-        queued++; // Using 'queued' variable name to keep rest of code working, but it's actually sent
+        queued++; 
         await supabase
           .from('leads')
           .update({
@@ -135,6 +136,7 @@ async function sendDailyWhatsApp() {
         });
 
         console.log(`   ✅ Sent via UltraMsg!`);
+        await sendMessage(`📱 WhatsApp sent to ${lead.business_name}`);
       } else {
         console.error(`   ❌ UltraMsg Error: ${resData.error || 'Unknown error'}`);
       }

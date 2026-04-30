@@ -74,11 +74,11 @@ function startAllJobs() {
   console.log('║         Target: 50 Leads / Day Volume        ║');
   console.log('╚══════════════════════════════════════════════╝\n');
 
-  // 0. HEALTH MONITOR — 7:00 AM
-  cron.schedule('0 7 * * *', safeJob('Daily Health Monitor', async () => {
-    await runHealthCheck();
-  }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ 07:00 AM — Daily Health Monitor');
+// 0. HEALTH MONITOR — 7:00 AM
+  // cron.schedule('0 7 * * *', safeJob('Daily Health Monitor', async () => {
+  //   await runHealthCheck();
+  // }), { timezone: 'Asia/Kolkata' });
+  // console.log('✅ 07:00 AM — Daily Health Monitor');
 
   // 0.1 EMAIL REPLY HANDLER — Every 5 minutes
   cron.schedule('*/5 * * * *', safeJob('Email Reply Handler', async () => {
@@ -93,13 +93,13 @@ function startAllJobs() {
   console.log('✅ Every 5m — WhatsApp Poll Fallback (in case webhook fails)');
 
   // 0.2 INSTAGRAM & LINKEDIN REPLY HANDLER — Every 2 hours
-  cron.schedule('0 */2 * * *', safeJob('Instagram Reply Handler', async () => {
-    await checkInstagramReplies();
-  }), { timezone: 'Asia/Kolkata' });
-  cron.schedule('30 */2 * * *', safeJob('LinkedIn Reply Handler', async () => {
-    await checkLinkedInReplies();
-  }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ Every 2h — Instagram & LinkedIn Auto-Reply Handler');
+  // cron.schedule('0 */2 * * *', safeJob('Instagram Reply Handler', async () => {
+  //   await checkInstagramReplies();
+  // }), { timezone: 'Asia/Kolkata' });
+  // cron.schedule('30 */2 * * *', safeJob('LinkedIn Reply Handler', async () => {
+  //   await checkLinkedInReplies();
+  // }), { timezone: 'Asia/Kolkata' });
+  // console.log('✅ Every 2h — Instagram & LinkedIn Auto-Reply Handler');
 
   // 1. MORNING PRIORITY REPORT — 8:30 AM
   cron.schedule('30 8 * * *', safeJob('Morning Priority Report', async () => {
@@ -110,11 +110,12 @@ function startAllJobs() {
   // 2. WHATSAPP OUTREACH — 10:00 AM
   cron.schedule('0 10 * * *', safeJob('WhatsApp Outreach', async () => {
     await sendDailyWhatsApp();
-    await sendDailyOutreachTargetReport();
+    // await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 10:00 AM — WhatsApp Outreach (Cold)');
 
   // 2.1 INSTAGRAM OUTREACH — 10:15 AM
+  /*
   cron.schedule('15 10 * * *', safeJob('Instagram Outreach', async () => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -129,17 +130,19 @@ function startAllJobs() {
     await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 10:15 AM — Instagram DM Outreach');
+  */
 
   // 3. EMAIL OUTREACH — 11:00 AM
   cron.schedule('0 11 * * *', safeJob('Email Outreach', async () => {
     await sendDailyColdEmails();
     await sendFollowupEmails1();
     await sendFollowupEmails2();
-    await sendDailyOutreachTargetReport();
+    // await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 11:00 AM — Email Outreach (Cold + Follow-ups)');
 
   // 3.1 LINKEDIN OUTREACH — 11:30 AM
+  /*
   cron.schedule('30 11 * * *', safeJob('LinkedIn Outreach', async () => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -154,12 +157,13 @@ function startAllJobs() {
     await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 11:30 AM — LinkedIn Outreach');
+  */
 
-  // 4. FOLLOW UP ENGINE — 12:00 PM
-  cron.schedule('0 12 * * *', safeJob('Follow Up Engine', async () => {
+  // 4. FOLLOW UP ENGINE — 12:00 PM (WhatsApp follow ups)
+  cron.schedule('0 12 * * *', safeJob('WhatsApp Follow Ups', async () => {
     await runFollowUpEngine();
   }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ 12:00 PM — Follow Up Engine');
+  console.log('✅ 12:00 PM — WhatsApp Follow Ups');
 
 
   // 6. SCRAPER & AUDIT — 4:00 PM
@@ -187,16 +191,16 @@ function startAllJobs() {
   console.log('✅ 04:00 PM — Scraper, Email Scraper & SEO Audit');
 
   // 7. WEEKLY SUNDAY REPORT — 8:00 PM
-  cron.schedule('0 20 * * 0', safeJob('Weekly Sunday Report', async () => {
-    await sendWeeklyReport();
-  }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ Sunday 8 PM — Weekly Sunday Report');
+  // cron.schedule('0 20 * * 0', safeJob('Weekly Sunday Report', async () => {
+  //   await sendWeeklyReport();
+  // }), { timezone: 'Asia/Kolkata' });
+  // console.log('✅ Sunday 8 PM — Weekly Sunday Report');
 
   // 8. SELF IMPROVEMENT BRAIN — Sunday 9 PM
-  cron.schedule('0 21 * * 0', safeJob('Self Improvement Brain', async () => {
-    await runSelfImprovement();
-  }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ Sunday 9 PM — Self Improvement Brain');
+  // cron.schedule('0 21 * * 0', safeJob('Self Improvement Brain', async () => {
+  //   await runSelfImprovement();
+  // }), { timezone: 'Asia/Kolkata' });
+  // console.log('✅ Sunday 9 PM — Self Improvement Brain');
 
   // 9. EVENING DASHBOARD — 9:00 PM
   cron.schedule('0 21 * * *', safeJob('Evening Dashboard', async () => {

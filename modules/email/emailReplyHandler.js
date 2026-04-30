@@ -16,32 +16,89 @@ if (fs.existsSync('.env')) {
 
 const { supabase } = require('../../config/database');
 const { askClaudeWithSystem } = require('../../config/claude');
-const { Resend } = require('resend');
 const { sendMessage } = require('../../config/telegram');
+const { google } = require('googleapis');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-const imapConfig = {
-  user: 'hey@naisora.com',
-  password: process.env.SMTP_PASS,
-  host: 'imap.hostinger.com',
-  port: 993,
-  tls: true,
-  tlsOptions: { rejectUnauthorized: false },
-  authTimeout: 10000,
-  connTimeout: 10000
-};
+// Failure tracking
+let imapFailureCount = 0;
+let lastImapFailureTime = 0;
 
 /**
- * Check Hostinger IMAP for unread replies from leads and auto-reply using Claude
+ * Get OAuth2 access token for Gmail
+ */
+async function getGmailAccessToken() {
+  try {
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.GMAIL_CLIENT_ID,
+      process.env.GMAIL_CLIENT_SECRET,
+      process.env.GMAIL_REDIRECT_URI || 'http://localhost:3000/oauth2callback'
+    );
+    oauth2Client.setCredentials({
+      refresh_token: process.env.GMAIL_REFRESH_TOKEN
+    });
+    const { token } = await oauth2Client.getAccessToken();
+    return token;
+  } catch (err) {
+    console.error('❌ Failed to get Gmail Access Token:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Check Gmail IMAP for unread replies from leads and auto-reply using Claude
  */
 async function handleEmailReplies() {
+  const now = Date.now();
+  if (imapFailureCount >= 3) {
+    const minutesSinceFailure = (now - lastImapFailureTime) / (1000 * 60);
+    if (minutesSinceFailure < 30) {
+      console.log(`⏭️  Skipping Email Reply Handler (Paused for ${Math.round(30 - minutesSinceFailure)} more mins due to 3 consecutive failures)`);
+      return;
+    } else {
+      console.log('🔄 30 minutes passed. Resetting IMAP failure count.');
+      imapFailureCount = 0;
+    }
+  }
+
   console.log('\n📧 --- Email Reply Handler (IMAP) Starting ---');
   
-  const imap = new Imap(imapConfig);
+  const user = process.env.GMAIL_USER || 'hello@naisora.com';
+  const imapOptions = {
+    user: user,
+    host: 'imap.gmail.com',
+    port: 993,
+    tls: true,
+    tlsOptions: { rejectUnauthorized: false },
+    connTimeout: 10000,
+    authTimeout: 10000,
+    socketTimeout: 10000
+  };
+
+  // Auth Method: App Password or OAuth2
+  if (process.env.GMAIL_APP_PASSWORD) {
+    imapOptions.password = process.env.GMAIL_APP_PASSWORD;
+  } else if (process.env.GMAIL_REFRESH_TOKEN) {
+    const accessToken = await getGmailAccessToken();
+    if (accessToken) {
+      // For node-imap, xoauth2 is a base64 encoded string
+      const authString = `user=${user}\x01auth=Bearer ${accessToken}\x01\x01`;
+      imapOptions.xoauth2 = Buffer.from(authString).toString('base64');
+    } else {
+      console.error('❌ OAuth2 fallback failed: No access token.');
+      imapFailureCount++;
+      lastImapFailureTime = Date.now();
+      return;
+    }
+  } else {
+    console.error('❌ No Gmail credentials found (GMAIL_APP_PASSWORD or OAuth tokens).');
+    return;
+  }
+
+  const imap = new Imap(imapOptions);
 
   return new Promise((resolve, reject) => {
     imap.once('ready', () => {
+      imapFailureCount = 0; // Reset on success
       imap.openBox('INBOX', false, (err, box) => {
         if (err) {
           imap.end();
@@ -73,8 +130,19 @@ async function handleEmailReplies() {
       });
     });
 
-    imap.once('error', (err) => {
-      console.error('IMAP Error:', err);
+    imap.once('error', async (err) => {
+      console.error('IMAP Error:', err.message);
+      imapFailureCount++;
+      lastImapFailureTime = Date.now();
+
+      if (imapFailureCount === 3) {
+        await sendMessage(
+          `🚨 *IMAP CRITICAL ERROR*\n\n` +
+          `Failed 3 times in a row. Pausing for 30 mins.\n` +
+          `Error: ${err.message}\n` +
+          `Time: ${new Date().toLocaleString()}`
+        );
+      }
       reject(err);
     });
 
@@ -151,20 +219,15 @@ ${lead.website_audit ? `Their website audit: ${JSON.stringify(lead.website_audit
             await sendMessage(`🔥 *HOT LEAD — ${lead.business_name}* wants to meet or asked for pricing!\nReply: ${body}`);
           }
 
-          // 3. Send reply via Resend
-          const { data, error: sendError } = await resend.emails.send({
-            from: 'Nahid from Naisora <hey@naisora.com>',
-            to: [fromEmail],
-            subject: `Re: ${subject}`,
-            text: aiReply,
-          });
-
-          if (sendError) {
+          // 3. Send reply via SMTP (Gmail)
+          try {
+            const { sendEmail } = require('../../config/smtp');
+            await sendEmail(fromEmail, `Re: ${subject}`, aiReply);
+            console.log(`   ✅ Sent auto-reply to ${lead.business_name}`);
+          } catch (sendError) {
             console.error(`   ❌ Failed to send email reply to ${fromEmail}:`, sendError.message);
             return resolve();
           }
-
-          console.log(`   ✅ Sent auto-reply to ${lead.business_name}`);
 
           // 4. Log to outreach_log
           await supabase.from('outreach_log').insert([
