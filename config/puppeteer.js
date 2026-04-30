@@ -9,7 +9,7 @@ const fs = require('fs');
 async function launchBrowser() {
   const options = {
     headless: true,
-    executablePath: '/usr/bin/chromium-browser',
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium-browser',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
@@ -21,9 +21,13 @@ async function launchBrowser() {
     ]
   };
 
-  // If not on linux, remove executablePath so it uses bundled chromium
-  if (process.platform !== 'linux' || !fs.existsSync(options.executablePath)) {
+  // If not on linux and no env path, delete executablePath to use bundled chromium
+  if (process.platform !== 'linux' && !process.env.PUPPETEER_EXECUTABLE_PATH) {
     delete options.executablePath;
+  } else if (process.platform === 'linux' && !fs.existsSync(options.executablePath)) {
+     // Fallback for some linux distros
+     const fallbackPath = '/usr/bin/google-chrome';
+     if (fs.existsSync(fallbackPath)) options.executablePath = fallbackPath;
   }
 
   return await puppeteer.launch(options);

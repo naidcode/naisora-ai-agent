@@ -116,7 +116,16 @@ function startAllJobs() {
 
   // 2.1 INSTAGRAM OUTREACH — 10:15 AM
   cron.schedule('15 10 * * *', safeJob('Instagram Outreach', async () => {
-    await runInstagramOutreach();
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await runInstagramOutreach();
+        break; 
+      } catch (err) {
+        console.log(`Instagram Attempt ${attempt} failed: ${err.message}`);
+        if (attempt === 3) await sendMessage(`❌ Instagram failed after 3 attempts: ${err.message}`);
+        await new Promise(r => setTimeout(r, 10000));
+      }
+    }
     await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 10:15 AM — Instagram DM Outreach');
@@ -132,7 +141,16 @@ function startAllJobs() {
 
   // 3.1 LINKEDIN OUTREACH — 11:30 AM
   cron.schedule('30 11 * * *', safeJob('LinkedIn Outreach', async () => {
-    await runLinkedInOutreach();
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await runLinkedInOutreach();
+        break; 
+      } catch (err) {
+        console.log(`LinkedIn Attempt ${attempt} failed: ${err.message}`);
+        if (attempt === 3) await sendMessage(`❌ LinkedIn failed after 3 attempts: ${err.message}`);
+        await new Promise(r => setTimeout(r, 10000));
+      }
+    }
     await sendDailyOutreachTargetReport();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 11:30 AM — LinkedIn Outreach');

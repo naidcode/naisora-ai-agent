@@ -60,42 +60,30 @@ function loadSession() {
   return null;
 }
 
-// ─── Login to LinkedIn ────────────────────────────────────────────────────────
+// ─── Login to LinkedIn (SESSION ONLY MODE) ────────────────────────────────────
 async function loginLinkedIn(page) {
   const savedCookies = loadSession();
-  if (savedCookies) {
-    console.log('   📂 Loading LinkedIn session cookies...');
-    await page.setCookie(...savedCookies);
-    await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'networkidle2', timeout: 60000 });
-    await randomDelay(3000, 5000);
-
-    const isLoggedIn = await page.$('div.feed-identity-module') || await page.$('div#global-nav');
-    if (isLoggedIn) {
-      console.log('   ✅ LinkedIn session restored');
-      return true;
-    } else {
-      console.log('   ⚠️ LinkedIn session expired, clearing file...');
-      if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
-    }
+  if (!savedCookies) {
+    console.log('   ❌ No LinkedIn session found. Skipping outreach.');
+    await sendTelegramAlert('⚠️ LinkedIn session missing — outreach skipped. Please login locally and save session.');
+    return false;
   }
 
-  console.log('   🔑 Logging into LinkedIn...');
-  await page.goto('https://www.linkedin.com/login', { waitUntil: 'networkidle2', timeout: 60000 });
-  await randomDelay(2000, 3000);
-
-  await page.waitForSelector('#username', { timeout: 10000 });
-  await page.type('#username', process.env.LINKEDIN_EMAIL, { delay: 80 });
-  await randomDelay(500, 1000);
-  await page.type('#password', process.env.LINKEDIN_PASSWORD, { delay: 80 });
-  await randomDelay(500, 1000);
-  await page.click('button[type="submit"]');
-  await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 60000 });
+  console.log('   📂 Loading LinkedIn session cookies...');
+  await page.setCookie(...savedCookies);
+  await page.goto('https://www.linkedin.com/feed/', { waitUntil: 'networkidle2', timeout: 60000 });
   await randomDelay(3000, 5000);
 
-  const cookies = await page.cookies();
-  saveSession(cookies);
-  console.log('   ✅ Logged in, session saved');
-  return true;
+  const isLoggedIn = await page.$('div.feed-identity-module') || await page.$('div#global-nav');
+  if (isLoggedIn) {
+    console.log('   ✅ LinkedIn session restored');
+    return true;
+  } else {
+    console.log('   ⚠️ LinkedIn session expired');
+    await sendTelegramAlert('⚠️ LinkedIn session expired on VPS — manual re-login needed.');
+    if (fs.existsSync(SESSION_FILE)) fs.unlinkSync(SESSION_FILE);
+    return false;
+  }
 }
 
 

@@ -141,35 +141,55 @@ const { askClaude } = require('../../config/claude');
 // ─── Send DM to a single account ─────────────────────────────────────────────
 async function sendInstagramDM(page, username, message, leadId = null) {
   try {
-    // Go to their profile and click Message
-    await page.goto(`https://www.instagram.com/${username}/`, { waitUntil: 'networkidle2' });
-    await randomDelay(2000, 3000);
+    // Navigate directly to DM page instead of clicking buttons
+    await page.goto(`https://www.instagram.com/direct/new/`, { waitUntil: 'networkidle2', timeout: 30000 });
+    await new Promise(r => setTimeout(r, 2000));
 
-    // Click Message button
-    const messageBtn = await page.evaluateHandle(() => {
-      const btns = Array.from(document.querySelectorAll('div[role="button"], button'));
-      return btns.find(b => b.textContent.includes('Message'));
-    });
+    // Search for user
+    console.log(`   🔍 Searching for @${username}...`);
+    const searchInput = await page.waitForSelector('input[placeholder="Search..."], input[name="queryBox"]', { timeout: 15000 });
+    await searchInput.type(username, { delay: 100 });
+    await new Promise(r => setTimeout(r, 3000));
 
-    if (!messageBtn) {
-      console.log(`   ⚠️  No message button for @${username} — may not be following or account is private`);
-      return false;
+    // Click the first result
+    const firstResult = await page.evaluateHandle((name) => {
+      const elements = Array.from(document.querySelectorAll('span, div'));
+      return elements.find(el => el.textContent === name);
+    }, username);
+
+    if (firstResult && firstResult.asElement()) {
+      await firstResult.asElement().click();
+      await new Promise(r => setTimeout(r, 2000));
+    } else {
+       // Fallback click by coordinate or first result row
+       await page.keyboard.press('Tab');
+       await page.keyboard.press('Enter');
+       await new Promise(r => setTimeout(r, 2000));
     }
 
-    await messageBtn.click();
-    await randomDelay(3000, 5000);
+    // Click Next button
+    const nextBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('div[role="button"], button'));
+      return btns.find(b => b.textContent.includes('Next') || b.textContent.includes('Chat'));
+    });
+    if (nextBtn && nextBtn.asElement()) await nextBtn.asElement().click();
+    await new Promise(r => setTimeout(r, 4000));
 
     // Type and send
     try {
-      const inputArea = await page.waitForSelector('div[aria-label="Message"], div[role="textbox"], textarea[placeholder="Message..."]', { timeout: 15000 });
+      // Message input fallback logic
+      const inputSelector = 'div[contenteditable="true"], textarea[placeholder="Message..."], div[aria-label="Message"]';
+      const inputArea = await page.waitForSelector(inputSelector, { timeout: 15000 });
+      
       if (inputArea) {
         await inputArea.click();
+        await new Promise(r => setTimeout(r, 1000));
         await page.keyboard.type(message, { delay: 60 });
-        await randomDelay(1000, 2000);
+        await new Promise(r => setTimeout(r, 2000));
 
         // Send
         await page.keyboard.press('Enter');
-        await randomDelay(1500, 2500);
+        await new Promise(r => setTimeout(r, 3000));
 
         // Log to outreach_log
         await supabase.from('outreach_log').insert({

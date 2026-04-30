@@ -263,3 +263,20 @@ agency-ai-agent/
 ├── package.json        ← Dependencies
 └── .env.example        ← Copy → rename to .env
 ```
+---
+
+## ☁️ Ubuntu VPS Setup (Production)
+
+If you are running this on an Ubuntu VPS, you MUST install these shared libraries for Puppeteer to work:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y libatk-bridge2.0-0 libatk1.0-0 libgbm1 libgtk-3-0 libnss3 libxss1 libasound2 chromium-browser
+```
+
+**Ensure your .env has these VPS-specific lines:**
+```env
+SERVER_MODE=true
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+```
