@@ -9,6 +9,7 @@ async function testInstagramDM() {
   console.log('🧪 Testing Instagram Outreach...');
   const browser = await launchBrowser();
   const page = await browser.newPage();
+  await page.setDefaultNavigationTimeout(30000);
   
   try {
     const loggedIn = await loginInstagram(page);

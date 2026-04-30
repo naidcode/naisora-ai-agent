@@ -7,6 +7,7 @@ async function testLinkedInMsg() {
   console.log('🧪 Testing LinkedIn Outreach...');
   const browser = await launchBrowser();
   const page = await browser.newPage();
+  await page.setDefaultNavigationTimeout(30000);
   
   try {
     const loggedIn = await loginLinkedIn(page);

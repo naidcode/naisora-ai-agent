@@ -213,8 +213,14 @@ async function runLinkedInOutreach() {
 
   console.log(`🎯 Found ${leads.length} leads for LinkedIn outreach`);
 
+  if (process.env.SKIP_PUPPETEER === 'true') {
+    console.log('⚠️ Skipping LinkedIn outreach due to low memory');
+    return;
+  }
+
   const browser = await launchBrowser();
   const page = await browser.newPage();
+  await page.setDefaultNavigationTimeout(30000);
   await page.setViewport({ width: 1280, height: 800 });
   await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
 
@@ -229,12 +235,21 @@ async function runLinkedInOutreach() {
       return;
     }
 
+    let sessionSent = 0;
     for (const lead of leads) {
       if (sent >= TARGET_MINIMUM) break;
 
+      // Fix 2: 3 messages per session limit
+      if (sessionSent >= 3) {
+        console.log('   🔄 Session limit (3) reached. Closing and reopening browser in 30s...');
+        await browser.close();
+        await delay(30000);
+        return runLinkedInOutreach(); // Restart for next batch
+      }
+
       const profileUrl = lead.linkedin_url;
       const area = lead.area || 'Bangalore';
-      const leadType = lead.lead_type || 'no_website'; // Default to no_website as per Fix 3
+      const leadType = lead.lead_type || 'no_website'; 
       const pagespeedScore = lead.pagespeed_score || 0;
 
       console.log(`\n👤 Preparing message for ${lead.business_name}...`);
@@ -265,7 +280,6 @@ Tone: professional but warm. LinkedIn style.
 Sign as Nahid, Founder at Naisora.
 Max 60 words.`;
       } else {
-        // Fix 3: Categorise skip leads or handle them
         console.log(`   ⏭️  Lead type skip — skipping`);
         skipped++;
         continue;
@@ -276,6 +290,7 @@ Max 60 words.`;
 
       if (success) {
         sent++;
+        sessionSent++;
         messagedLeads.push(lead);
         
         // Update lead status

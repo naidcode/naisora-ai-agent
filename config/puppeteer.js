@@ -16,7 +16,8 @@ async function launchBrowser() {
       '--disable-dev-shm-usage',
       '--disable-gpu',
       '--no-zygote',
-      '--single-process'
+      '--disable-background-networking',
+      '--memory-pressure-off'
     ]
   };
 

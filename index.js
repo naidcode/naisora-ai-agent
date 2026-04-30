@@ -291,6 +291,15 @@ async function startAgent() {
     console.log("💻 Running locally\n");
   }
 
+  // Fix 3: Memory check
+  const os = require('os');
+  const freeRAM = os.freemem() / 1024 / 1024;
+  console.log(`🧠 Free RAM: ${Math.round(freeRAM)}MB`);
+  if (freeRAM < 200) {
+    console.log('⚠️ Low RAM — skipping Puppeteer tasks (IG/LinkedIn) to prevent crash');
+    process.env.SKIP_PUPPETEER = 'true';
+  }
+
   console.log("🚀 Starting up...\n");
   console.log("─".repeat(42));
   
@@ -379,8 +388,6 @@ async function startAgent() {
   console.log("✅ Agent starting...");
   console.log("─".repeat(42) + "\n");
 
-  // Start all scheduled cron jobs
-  startAllJobs();
 
   console.log("─".repeat(42));
   console.log("\n🤖 Naisora Agent is live.\n");
@@ -391,6 +398,10 @@ async function startAgent() {
       "☁️  Server mode — cron jobs running, waiting for scheduled tasks...",
     );
     console.log("📱 You will receive Telegram alerts for all activity.\n");
+
+    // Start all scheduled cron jobs (Fix 1: Moved after server check)
+    startAllJobs();
+
     // Keep process alive
     // Keep alive + start HTTP
 const express = require('express');
@@ -441,6 +452,10 @@ app.listen(process.env.PORT || 3000, '0.0.0.0')
   } else {
     // Local: show interactive menu
     console.log("💻 Local mode — showing interactive menu...\n");
+    
+    // Start all scheduled cron jobs (Fix 1: Moved after server check)
+    startAllJobs();
+
     showMenu();
   }
 }
