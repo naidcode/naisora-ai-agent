@@ -24,16 +24,8 @@ jobs:
           port: 22
           envs: TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID
           script: |
-            # Check if directory exists, if not, find it or error out
-            if [ -d "/home/${{ secrets.VPS_USER }}/naisora-ai-agent" ]; then
-              cd "/home/${{ secrets.VPS_USER }}/naisora-ai-agent"
-            elif [ -d "/home/${{ secrets.VPS_USER }}/Naisora-AI-Agent" ]; then
-              cd "/home/${{ secrets.VPS_USER }}/Naisora-AI-Agent"
-            else
-              echo "❌ Error: Project directory not found in home folder!"
-              exit 1
-            fi
-            
+            cd ~/naisora-ai-agent
+            git stash
             git pull origin main
             
             # Update .env file with secrets
@@ -42,7 +34,12 @@ jobs:
             echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" >> .env
             sed -i "/^TELEGRAM_CHAT_ID=/d" .env
             echo "TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID" >> .env
+
+            export NVM_DIR="$HOME/.nvm"
+            source "$NVM_DIR/nvm.sh"
             
-            npm install --production
-            pm2 restart all || pm2 start index.js --name "naisora-agent"
+            npm install
+            pm2 restart naisora-agent
+            pm2 restart naisora-whatsapp
+            pm2 save
             echo "✅ Deployment successful!"
