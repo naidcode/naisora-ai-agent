@@ -14,11 +14,15 @@ jobs:
 
       - name: 🚀 Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: 22
+          envs: TELEGRAM_BOT_TOKEN,TELEGRAM_CHAT_ID
           script: |
             # Check if directory exists, if not, find it or error out
             if [ -d "/home/${{ secrets.VPS_USER }}/naisora-ai-agent" ]; then
@@ -31,6 +35,14 @@ jobs:
             fi
             
             git pull origin main
+            
+            # Update .env file with secrets
+            touch .env
+            sed -i "/^TELEGRAM_BOT_TOKEN=/d" .env
+            echo "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN" >> .env
+            sed -i "/^TELEGRAM_CHAT_ID=/d" .env
+            echo "TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID" >> .env
+            
             npm install --production
             pm2 restart all || pm2 start index.js --name "naisora-agent"
             echo "✅ Deployment successful!"
