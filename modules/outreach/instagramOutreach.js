@@ -146,9 +146,10 @@ async function sendInstagramDM(page, username, message, leadId = null) {
     await randomDelay(2000, 3000);
 
     // Click Message button
-    const messageBtn = await page.$('div[role="button"]:-soup-contains("Message")') ||
-                       await page.$('button:-soup-contains("Message")') ||
-                       await page.$('button._acan._acap._acas._aj1-._ap30'); // Generic blue button selector fallback
+    const messageBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('div[role="button"], button'));
+      return btns.find(b => b.textContent.includes('Message'));
+    });
 
     if (!messageBtn) {
       console.log(`   ⚠️  No message button for @${username} — may not be following or account is private`);
@@ -158,37 +159,37 @@ async function sendInstagramDM(page, username, message, leadId = null) {
     await messageBtn.click();
     await randomDelay(3000, 5000);
 
-    // Type message
-    const inputArea = await page.$('div[aria-label="Message"]') ||
-                      await page.$('div[role="textbox"]') ||
-                      await page.$('textarea[placeholder]');
+    // Type and send
+    try {
+      const inputArea = await page.waitForSelector('div[aria-label="Message"], div[role="textbox"], textarea[placeholder="Message..."]', { timeout: 15000 });
+      if (inputArea) {
+        await inputArea.click();
+        await page.keyboard.type(message, { delay: 60 });
+        await randomDelay(1000, 2000);
 
-    if (!inputArea) {
-      console.log(`   ⚠️  Could not find message input for @${username}`);
-      return false;
+        // Send
+        await page.keyboard.press('Enter');
+        await randomDelay(1500, 2500);
+
+        // Log to outreach_log
+        await supabase.from('outreach_log').insert({
+          lead_id: leadId,
+          channel: 'instagram',
+          message_type: 'cold',
+          message_text: message,
+          sent_at: new Date().toISOString(),
+          delivered: true,
+          reply_text: username, 
+        });
+
+        console.log(`   ✅ DM sent to @${username}`);
+        return true;
+      }
+    } catch (e) {
+      console.log(`   ⚠️  Could not find message input for @${username}: ${e.message}`);
     }
-
-    await inputArea.click();
-    await inputArea.type(message, { delay: 60 });
-    await randomDelay(1000, 2000);
-
-    // Send
-    await page.keyboard.press('Enter');
-    await randomDelay(1500, 2500);
-
-    // Log to outreach_log
-    await supabase.from('outreach_log').insert({
-      lead_id: leadId,
-      channel: 'instagram',
-      message_type: 'cold',
-      message_text: message,
-      sent_at: new Date().toISOString(),
-      delivered: true,
-      reply_text: username, 
-    });
-
-    console.log(`   ✅ DM sent to @${username}`);
-    return true;
+    
+    return false;
 
   } catch (err) {
     console.error(`   ❌ Failed to DM @${username}: ${err.message}`);

@@ -114,24 +114,30 @@ async function sendLinkedInMessage(page, profileUrl, message, leadId = null) {
       await randomDelay(2000, 3000);
 
       // Type and send
-      const inputArea = await page.$('div[role="textbox"]') || await page.$('.msg-form__contenteditable');
-      if (inputArea) {
-        await inputArea.click();
-        await inputArea.type(message, { delay: 60 });
-        await randomDelay(1000, 2000);
-        
-        const sendBtn = await page.$('button.msg-form__send-button');
-        if (sendBtn) await sendBtn.click();
-        
-        await randomDelay(1500, 2500);
-        console.log(`   ✅ Direct message sent via profile`);
-        return true;
+      try {
+        const inputArea = await page.waitForSelector('div[role="textbox"], .msg-form__contenteditable, [aria-label="Write a message..."]', { timeout: 15000 });
+        if (inputArea) {
+          await inputArea.click();
+          await page.keyboard.type(message, { delay: 60 });
+          await randomDelay(1000, 2000);
+          
+          const sendBtn = await page.waitForSelector('button.msg-form__send-button', { timeout: 5000 });
+          if (sendBtn) await sendBtn.click();
+          
+          await randomDelay(1500, 2500);
+          console.log(`   ✅ Direct message sent via profile`);
+          return true;
+        }
+      } catch (e) {
+        console.log(`   ⚠️ Direct message input not found, trying connection request...`);
       }
     }
 
     // If no message button, try Connection Request with Note
-    const connectBtn = await page.$('button[aria-label^="Connect"]') ||
-                       await page.$('button.pvs-profile-actions__action:-soup-contains("Connect")');
+    const connectBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'));
+      return btns.find(b => b.textContent.includes('Connect'));
+    });
 
     if (connectBtn) {
       await connectBtn.click();

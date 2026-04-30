@@ -23,24 +23,28 @@ async function testLinkedInMsg() {
     await new Promise(r => setTimeout(r, 5000));
 
     // Try to find Message button
-    let messageBtn = await page.$('button[aria-label^="Message"]') ||
-                     await page.$('button.pvs-profile-actions__action.artdeco-button--primary');
+    let messageBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('button'));
+      return btns.find(b => b.textContent.includes('Message'));
+    }) || await page.$('button.pvs-profile-actions__action.artdeco-button--primary');
 
     if (!messageBtn) throw new Error('Message/Connect button not found');
     
-    await messageBtn.click();
+    await messageBtn.asElement().click();
     await new Promise(r => setTimeout(r, 3000));
 
-    const inputArea = await page.$('div[role="textbox"]') || await page.$('.msg-form__contenteditable');
-    if (inputArea) {
-      await inputArea.click();
-      await inputArea.type(message, { delay: 60 });
-      const sendBtn = await page.$('button.msg-form__send-button');
-      if (sendBtn) await sendBtn.click();
-      console.log('✅ LinkedIn direct message sent!');
-    } else {
+    try {
+      const inputArea = await page.waitForSelector('div[role="textbox"], .msg-form__contenteditable, [aria-label="Write a message..."]', { timeout: 10000 });
+      if (inputArea) {
+        await inputArea.click();
+        await page.keyboard.type(message, { delay: 60 });
+        const sendBtn = await page.waitForSelector('button.msg-form__send-button', { timeout: 5000 });
+        if (sendBtn) await sendBtn.click();
+        console.log('✅ LinkedIn direct message sent!');
+      }
+    } catch (e) {
       // Fallback for connection request note
-      const noteInput = await page.$('textarea[name="message"]');
+      const noteInput = await page.waitForSelector('textarea[name="message"]', { timeout: 5000 });
       if (noteInput) {
         await noteInput.type(message.substring(0, 199), { delay: 60 });
         const sendBtn = await page.$('button[aria-label="Send now"]');
@@ -57,7 +61,7 @@ async function testLinkedInMsg() {
     console.error('❌ LinkedIn Test Failed:', err.message);
     await sendTelegramAlert(`💼 ❌ *LinkedIn Outreach Test:* Failed!\nError: ${err.message}`);
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
   }
 }
 

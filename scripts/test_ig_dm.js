@@ -24,19 +24,23 @@ async function testInstagramDM() {
     await new Promise(r => setTimeout(r, 3000));
 
     // Click Message button
-    const messageBtn = await page.$('div[role="button"]:-soup-contains("Message")') ||
-                       await page.$('button:-soup-contains("Message")');
+    const messageBtn = await page.evaluateHandle(() => {
+      const btns = Array.from(document.querySelectorAll('div[role="button"], button'));
+      return btns.find(b => b.textContent.includes('Message'));
+    });
 
     if (!messageBtn) throw new Error('Message button not found');
-    await messageBtn.click();
+    await messageBtn.asElement().click();
     await new Promise(r => setTimeout(r, 5000));
 
-    const inputArea = await page.$('div[aria-label="Message"]') ||
-                      await page.$('div[role="textbox"]');
-
+    // Type and send
+    const inputArea = await page.waitForSelector('div[aria-label="Message"], div[role="textbox"], textarea[placeholder="Message..."]', { timeout: 15000 });
+    
     if (!inputArea) throw new Error('Message input area not found');
+    
     await inputArea.click();
-    await inputArea.type(message, { delay: 60 });
+    await page.keyboard.type(message, { delay: 60 });
+    await new Promise(r => setTimeout(r, 1000));
     await page.keyboard.press('Enter');
     await new Promise(r => setTimeout(r, 3000));
 
@@ -47,7 +51,7 @@ async function testInstagramDM() {
     console.error('❌ Instagram Test Failed:', err.message);
     await sendTelegramAlert(`📸 ❌ *Instagram Outreach Test:* Failed!\nError: ${err.message}`);
   } finally {
-    await browser.close();
+    if (browser) await browser.close();
   }
 }
 
