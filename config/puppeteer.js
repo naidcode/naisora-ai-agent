@@ -9,38 +9,20 @@ const fs = require('fs');
 async function launchBrowser() {
   const options = {
     headless: true,
+    executablePath: '/usr/bin/chromium-browser',
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      '--no-first-run',
       '--no-zygote',
-      '--single-process',
-      '--disable-extensions'
-    ],
-    protocolTimeout: 60000
+      '--single-process'
+    ]
   };
 
-  // ── Robust executablePath for Ubuntu VPS ──
-  if (os.platform() === 'linux') {
-    const linuxPaths = [
-      '/usr/bin/chromium-browser',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium',
-      '/snap/bin/chromium'
-    ];
-    
-    for (const path of linuxPaths) {
-      if (fs.existsSync(path)) {
-        options.executablePath = path;
-        break;
-      }
-    }
-    
-    if (!options.executablePath) {
-      console.log('⚠️  Warning: No system Chromium found, relying on Puppeteer bundled version');
-    }
+  // If not on linux, remove executablePath so it uses bundled chromium
+  if (process.platform !== 'linux' || !fs.existsSync(options.executablePath)) {
+    delete options.executablePath;
   }
 
   return await puppeteer.launch(options);

@@ -55,14 +55,15 @@ const { selectBestLeads } = require("./brain/leadSelector");
 const { runFollowUpEngine } = require("./modules/outreach/followUpEngine");
 const { isStopped, stopAgent, startAgent: resumeAgent } = require("./system/masterSwitch");
 
-// ─── Detect if running on Railway (no interactive menu on server) ─────────────
-const IS_RAILWAY =
+// ─── Detect if running in Server Mode (no interactive menu) ─────────────
+const IS_SERVER =
+  process.env.SERVER_MODE === 'true' ||
   !!process.env.RAILWAY_ENVIRONMENT ||
   !!process.env.RAILWAY_SERVICE_NAME ||
   !!process.env.RAILWAY_PROJECT_ID;
 
 // ============================================
-// INTERACTIVE MENU (local only — skipped on Railway)
+// INTERACTIVE MENU (local only — skipped in server mode)
 // ============================================
 async function showMenu() {
   const readline = require("readline");
@@ -284,8 +285,8 @@ async function startAgent() {
   console.log("║   AI-Powered Web Design Agency Bot     ║");
   console.log("╚════════════════════════════════════════╝\n");
 
-  if (IS_RAILWAY) {
-    console.log("☁️  Running on Railway — server mode (no interactive menu)\n");
+  if (IS_SERVER) {
+    console.log("🚀 Running in SERVER MODE — scheduler active\n");
   } else {
     console.log("💻 Running locally\n");
   }
@@ -355,7 +356,7 @@ async function startAgent() {
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📱 WhatsApp:     ☁️  Queue Mode (Railway) / 💻 Service Mode (Local)`,
+    `  📱 WhatsApp:     ☁️  Queue Mode (Server) / 💻 Service Mode (Local)`,
   );
 
 
@@ -384,13 +385,13 @@ async function startAgent() {
   console.log("─".repeat(42));
   console.log("\n🤖 Naisora Agent is live.\n");
 
-  // ── On Railway: keep process alive, no interactive menu ──
-  if (IS_RAILWAY) {
+  // ── On Server: keep process alive, no interactive menu ──
+  if (IS_SERVER) {
     console.log(
-      "☁️  Railway mode — cron jobs running, waiting for scheduled tasks...",
+      "☁️  Server mode — cron jobs running, waiting for scheduled tasks...",
     );
     console.log("📱 You will receive Telegram alerts for all activity.\n");
-    // Keep process alive on Railway
+    // Keep process alive
     // Keep alive + start HTTP
 const express = require('express');
 const app = express();

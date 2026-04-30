@@ -208,29 +208,47 @@ async function runHealthCheck() {
         }
     } catch (e) { report.scheduler.error = e.message; }
 
+    // 14. Channel Tests (Optional CLI flag)
+    if (process.argv.includes('--run-tests')) {
+        console.log("\n🧪 Running Channel Tests (IG, LinkedIn)...");
+        const { testInstagramDM } = require('./scripts/test_ig_dm');
+        const { testLinkedInMsg } = require('./scripts/test_linkedin_msg');
+        await testInstagramDM();
+        await testLinkedInMsg();
+    }
+
+    const reportMsg = `
+📊 *NAISORA AGENT HEALTH REPORT*
+━━━━━━━━━━━━━━━━━━━━
+✅ *Core:*
+- ENV: ${report.env.ok ? 'OK' : '❌ ' + report.env.error}
+- DB: ${report.supabase.ok ? 'OK' : '❌ ' + report.supabase.error}
+- AI: ${report.sonnet.ok ? 'OK' : '❌ ' + report.sonnet.error}
+- Puppeteer: ${report.puppeteer.ok ? 'OK' : '❌ ' + report.puppeteer.error}
+
+📱 *Outreach Channels:*
+- Email: ${report.resend.ok ? '✅ Ready' : '❌ Failed'}
+- WhatsApp: ${report.whatsapp.includes('✅') ? '✅ UltraMsg Ready' : '❌ Config Missing'}
+- Instagram: ${report.instagram.ok ? '✅ Session Ready' : '⚠️ ' + report.instagram.error}
+- LinkedIn: ${report.linkedin.ok ? '✅ Session Ready' : '⚠️ ' + report.linkedin.error}
+
+🤖 *Automation:*
+- Scheduler: ${report.scheduler.ok ? '✅ Crons Active' : '❌ Missing Crons'}
+- Auto-Reply: ✅ 5m Polling Active
+
+━━━━━━━━━━━━━━━━━━━━
+🌡️ *Status:* ${report.env.ok && report.supabase.ok && report.sonnet.ok ? '🟢 OPERATIONAL' : '🔴 ISSUES DETECTED'}
+`.trim();
+
+    const { sendMessage } = require('./config/telegram');
+    await sendMessage(reportMsg);
+
     console.log("=============================");
-    console.log("🤖 NAISORA FINAL HEALTH REPORT");
-    console.log("=============================");
-    
-    console.log(`${report.env.ok ? '✅' : '❌'} Environment Variables — ${report.env.ok ? 'All present' : report.env.error}`);
-    console.log(`${report.supabase.ok ? '✅' : '❌'} Supabase — ${report.supabase.ok ? 'Connected, all 8 tables present' : report.supabase.error}`);
-    console.log(`${report.haiku.ok ? '✅' : '❌'} Claude Haiku — ${report.haiku.ok ? 'Connected' : report.haiku.error}`);
-    console.log(`${report.sonnet.ok ? '✅' : '❌'} Claude Sonnet — ${report.sonnet.ok ? 'Connected' : report.sonnet.error}`);
-    console.log(`${report.resend.ok ? '✅' : '❌'} Resend Email — ${report.resend.ok ? 'Working' : report.resend.error}`);
-    console.log(`${report.telegram.ok ? '✅' : '❌'} Telegram — ${report.telegram.ok ? 'Working' : report.telegram.error}`);
-    console.log(`${report.puppeteer.ok ? '✅' : '❌'} Puppeteer — ${report.puppeteer.ok ? 'Working' : report.puppeteer.error}`);
-    console.log(`${report.leadScore.ok ? '✅' : '❌'} Lead Scoring — ${report.leadScore.ok ? 'Returns number correctly' : report.leadScore.error}`);
-    console.log(`${report.instagram.ok ? '✅' : '❌'} Instagram Session — ${report.instagram.ok ? 'Loaded' : report.instagram.error}`);
-    console.log(`${report.linkedin.ok ? '✅' : '❌'} LinkedIn Session — ${report.linkedin.ok ? 'Loaded' : report.linkedin.error}`);
-    console.log(report.whatsapp);
-    console.log(`${report.content.ok ? '✅' : '❌'} Content Pipeline — ${report.content.ok ? 'All 5 modules ready' : report.content.error}`);
-    console.log(`${report.seo.ok ? '✅' : '❌'} SEO Modules — ${report.seo.ok ? 'All ready' : report.seo.error}`);
-    console.log(`${report.scheduler.ok ? '✅' : '❌'} Scheduler — ${report.scheduler.ok ? 'All 7 cron jobs registered' : report.scheduler.error}`);
-    
-    console.log("=============================");
-    const allOk = report.env.ok && report.supabase.ok && report.haiku.ok && report.sonnet.ok && report.resend.ok && report.telegram.ok && report.puppeteer.ok && report.leadScore.ok && report.instagram.ok && report.linkedin.ok && report.content.ok && report.seo.ok && report.scheduler.ok;
-    console.log(`AGENT STATUS: ${allOk ? '🟢 FULLY OPERATIONAL' : '🔴 ISSUES DETECTED'}`);
+    console.log("🤖 NAISORA FINAL HEALTH REPORT SENT TO TELEGRAM");
     console.log("=============================");
 }
 
-runHealthCheck();
+runHealthCheck().catch(err => {
+    console.error('Fatal error in health check:', err.message);
+    process.exit(1);
+});

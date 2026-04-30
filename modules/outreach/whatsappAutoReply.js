@@ -37,18 +37,32 @@ Rules:
 - Natural Indian English tone
 - Max 4-5 lines per reply
 - Always end with one question to keep conversation going
-- Goal: book a free 10 minute call or send them the audit report
+- Goal: move them toward booking a call or sending an audit
+- If they mention "price", "cost", "how much" → website from ₹8,000, SEO from ₹3,000/month
+- If they mention "call", "meet", "talk", "interested" → send Calendly link: https://calendly.com/naisora/15min or ask for availability
+- If they say "not interested", "no thanks", "remove" → be polite, wish them well, and I will mark them as opted out.
 - Never use corporate language or sound like a bot
-- If they ask price: website from ₹8,000, SEO from ₹3,000/month
-- If not interested: be polite, wish them well, stop messaging
-- If interested: offer to send audit or book a call
 
 Their lead type: ${lead.lead_type || 'unknown'}
-Their business: ${lead.business_name} in ${lead.area}`;
+Their business: ${lead.business_name} in ${lead.area}
+${lead.website_audit ? `Their website audit: ${JSON.stringify(lead.website_audit)}` : ''}`;
 
-  // 3. Get response from Claude Haiku
+  // 3. Get response from Claude
   try {
     const response = await askClaudeWithSystem(systemPrompt, messageText);
+    
+    // 3.1 Handle Opt-out
+    if (messageText.toLowerCase().includes('not interested') || messageText.toLowerCase().includes('no thanks') || messageText.toLowerCase().includes('remove')) {
+      await supabase.from('leads').update({ opted_out: true }).eq('id', lead.id);
+      console.log(`   ⛔ Lead opted out: ${lead.business_name}`);
+    }
+    
+    // 3.2 Handle Hot Lead (Interest shown)
+    if (messageText.toLowerCase().match(/call|meet|talk|interested|yes|price|cost|how much/)) {
+      await supabase.from('leads').update({ lead_category: 'hot' }).eq('id', lead.id);
+      const { sendMessage } = require('../../config/telegram');
+      await sendMessage(`🔥 *HOT LEAD — ${lead.business_name}* wants to meet on WhatsApp!\nReply: ${messageText}`);
+    }
 
     // 4. Log the incoming message
     await supabase.from('outreach_log').insert({

@@ -154,4 +154,4 @@ async function checkReplies() {
   return newReplies;
 }
 
-module.exports = { checkReplies, fetchTwilioReplies, triggerCallBooking };
+module.exports = { checkReplies, triggerCallBooking };

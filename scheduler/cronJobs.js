@@ -80,11 +80,17 @@ function startAllJobs() {
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 07:00 AM — Daily Health Monitor');
 
-  // 0.1 EMAIL REPLY HANDLER — Every 30 minutes
-  cron.schedule('*/30 * * * *', safeJob('Email Reply Handler', async () => {
+  // 0.1 EMAIL REPLY HANDLER — Every 5 minutes
+  cron.schedule('*/5 * * * *', safeJob('Email Reply Handler', async () => {
     await handleEmailReplies();
   }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ Every 30m — Email Auto-Reply Handler');
+  console.log('✅ Every 5m — Email Auto-Reply Handler');
+
+  // 0.1.1 WHATSAPP POLL FALLBACK — Every 5 minutes
+  cron.schedule('*/5 * * * *', safeJob('WhatsApp Poll Fallback', async () => {
+    await checkReplies();
+  }), { timezone: 'Asia/Kolkata' });
+  console.log('✅ Every 5m — WhatsApp Poll Fallback (in case webhook fails)');
 
   // 0.2 INSTAGRAM & LINKEDIN REPLY HANDLER — Every 2 hours
   cron.schedule('0 */2 * * *', safeJob('Instagram Reply Handler', async () => {
@@ -137,11 +143,6 @@ function startAllJobs() {
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 12:00 PM — Follow Up Engine');
 
-  // 5. CHECK REPLIES — Every 3 hours
-  cron.schedule('0 */3 * * *', safeJob('Check Replies', async () => {
-    await checkReplies();
-  }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ Every 3h — Check WhatsApp Replies');
 
   // 6. SCRAPER & AUDIT — 4:00 PM
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {

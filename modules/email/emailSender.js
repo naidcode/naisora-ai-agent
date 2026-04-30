@@ -78,7 +78,16 @@ async function sendDailyColdEmails() {
     try {
       console.log(`\n✍️  Writing email for: ${lead.business_name}...`);
       
-      const email = await writeColdEmail(lead);
+      let email = await writeColdEmail(lead);
+      
+      // Fix 4: Null check for email object
+      if (!email || !email.subject || !email.body) {
+        console.log(`⚠️ AI failed to write email for ${lead.business_name}. Using default template.`);
+        email = {
+          subject: `Question about ${lead.business_name}`,
+          body: `Hi,\n\nI noticed ${lead.business_name} in ${lead.area} doesn't have a modern website yet. We're helping restaurants in Bangalore get more direct orders through better websites and SEO.\n\nWould you be open to a quick 10-minute chat about how we can help you grow?\n\nBest,\nNahid from Naisora`
+        };
+      }
       
       console.log(`📧 Subject: ${email.subject}`);
       console.log(`📤 Sending to: ${emailAddress}...`);
@@ -185,7 +194,13 @@ async function sendFollowupEmails1() {
 
   for (const lead of leads) {
     try {
-      const email = await writeFollowup1(lead);
+      let email = await writeFollowup1(lead);
+      if (!email || !email.subject || !email.body) {
+        email = {
+          subject: `Re: Question about ${lead.business_name}`,
+          body: `Hi,\n\nJust following up on my previous email. Did you get a chance to see how we could help ${lead.business_name} with a better website?\n\nBest,\nNahid`
+        };
+      }
       await sendEmail(lead.email, email.subject, email.body);
       
       await updateLeadStatus(lead.id, STATUS.FOLLOWUP_1);
@@ -220,7 +235,13 @@ async function sendFollowupEmails2() {
 
   for (const lead of leads) {
     try {
-      const email = await writeFollowup2(lead);
+      let email = await writeFollowup2(lead);
+      if (!email || !email.subject || !email.body) {
+        email = {
+          subject: `Final follow up: ${lead.business_name}`,
+          body: `Hi,\n\nI haven't heard back, so I'll assume you're not interested right now. No worries! If you ever need help with your website or SEO, feel free to reach out.\n\nBest,\nNahid`
+        };
+      }
       await sendEmail(lead.email, email.subject, email.body);
       
       await updateLeadStatus(lead.id, STATUS.FOLLOWUP_2);
@@ -276,7 +297,13 @@ async function sendScraperFollowUpEmail(lead) {
   
   try {
     console.log(`\n🔄 Writing auto follow-up for: ${lead.business_name}...`);
-    const email = await writeScraperFollowUpEmail(lead);
+    let email = await writeScraperFollowUpEmail(lead);
+    if (!email || !email.subject || !email.body) {
+      email = {
+        subject: `I found ${lead.business_name} on Google Maps`,
+        body: `Hi,\n\nI was looking at restaurants in ${lead.area} and found ${lead.business_name}. I noticed you don't have a website listed. We specialize in building sites for Bangalore restaurants.\n\nInterested in a free audit?\n\nBest,\nNahid`
+      };
+    }
     
     console.log(`📧 Subject: ${email.subject}`);
     await sendEmail(lead.email, email.subject, email.body);
