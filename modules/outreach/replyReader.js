@@ -15,12 +15,18 @@ async function fetchUltraMsgReplies() {
   try {
     const url = `https://api.ultramsg.com/${instance}/messages?token=${token}&msgId=&to=&page=1&limit=50&sort=desc`;
     const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error(`❌ UltraMsg Fetch Failed — Status: ${response.status} (${response.statusText})`);
+      return [];
+    }
+
     const data = await response.json();
     
     // Filter for inbound messages only
     return (data.messages || []).filter(m => m.fromMe === false && m.type === 'chat');
   } catch (err) {
-    console.error('UltraMsg fetch error:', err.message);
+    console.error('💥 UltraMsg Fetch Fatal Error:', err.message);
     return [];
   }
 }

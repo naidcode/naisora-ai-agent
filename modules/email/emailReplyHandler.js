@@ -40,11 +40,11 @@ async function handleEmailReplies() {
 
   console.log('\n📧 --- Email Reply Handler (IMAP) Starting ---');
   
-  const user = process.env.GMAIL_USER || 'hello@naisora.com';
+  const user = process.env.IMAP_USER || 'hey@naisora.com';
   const imapOptions = {
     user: user,
-    password: process.env.GMAIL_APP_PASSWORD,
-    host: 'imap.gmail.com',
+    password: process.env.IMAP_PASS,
+    host: process.env.IMAP_HOST || 'imap.hostinger.com',
     port: 993,
     tls: true,
     tlsOptions: { rejectUnauthorized: false },
@@ -54,7 +54,7 @@ async function handleEmailReplies() {
   };
 
   if (!imapOptions.password) {
-    console.error('❌ GMAIL_APP_PASSWORD missing in .env. Skipping IMAP.');
+    console.error('❌ IMAP_PASS missing in .env. Skipping IMAP.');
     return;
   }
 

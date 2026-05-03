@@ -27,6 +27,13 @@ async function sendUltraMsg(phone, message) {
     })
   });
 
+  if (!response.ok) {
+    console.error(`❌ UltraMsg Send Failed — Status: ${response.status} (${response.statusText})`);
+    const errorText = await response.text();
+    console.error(`   Details: ${errorText}`);
+    throw new Error(`UltraMsg HTTP Error: ${response.status}`);
+  }
+
   const data = await response.json();
   
   if (data.sent !== 'true' && !data.id) {

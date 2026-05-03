@@ -122,6 +122,10 @@ async function sendDailyWhatsApp() {
         })
       });
 
+      if (!response.ok) {
+        console.error(`   ❌ UltraMsg HTTP Error: ${response.status} (${response.statusText})`);
+      }
+
       const resData = await response.json();
 
       if (resData.sent === 'true' || resData.id) {
@@ -235,6 +239,10 @@ async function sendFollowUp() {
           body: message
         })
       });
+
+      if (!response.ok) {
+        console.error(`   ❌ UltraMsg HTTP Error: ${response.status} (${response.statusText})`);
+      }
 
       const resData = await response.json();
 
