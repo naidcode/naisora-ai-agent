@@ -142,15 +142,75 @@ function startAllJobs() {
 
   // 6. SCRAPER & AUDIT — 4:00 PM
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {
-    const rawLeads = await runFullScrape({
-      areas: ['Koramangala', 'Indiranagar', 'HSR Layout', 'Whitefield', 'Jayanagar'],
-      searchTypes: ['restaurants', 'cafes'],
-      maxPerSearch: 20
-    });
+    const { runFullScrape } = require('../modules/scraper/googleMapsScraper');
     const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');
-    await getReadyLeads(rawLeads);
-    await scrapeEmailsForLeads(30);
-    await auditWarmLeads(10);
+    const { runFullAudit } = require('../modules/seo/seoAudit');
+    const { researchKeywords } = require('../modules/seo/keywordResearch');
+    const { writeBlogPost } = require('../modules/content/blogWriter');
+    const { sendAuditReport, sendDailySEOSummary } = require('../config/telegramReporter');
+
+    // 1. Scrape new leads
+    const rawLeads = await runFullScrape({
+      searchTypes: ['restaurants', 'cafes'],
+      maxPerSearch: 15
+    });
+    
+    const { newLeads } = await getReadyLeads(rawLeads);
+
+    if (!newLeads || newLeads.length === 0) {
+      console.log('ℹ️ No new leads found today.');
+      return;
+    }
+
+    const stats = { total: 0, hot: 0, warm: 0, good: 0, blogs: 0, keywords: 0, topIssue: 'None', bestLead: { name: 'N/A', area: 'N/A', score: 0, reason: 'N/A' } };
+    const allIssues = [];
+
+    // 2. Process each new lead
+    for (const lead of newLeads) {
+      try {
+        // Full SEO Audit
+        const audit = await runFullAudit(lead);
+        stats.total++;
+        if (audit.grade === 'A' || audit.grade === 'B') stats.good++;
+        else if (audit.grade === 'C') stats.warm++;
+        else stats.hot++;
+
+        if (audit.total_score > stats.bestLead.score) {
+          stats.bestLead = { name: audit.restaurant, area: audit.area, score: audit.total_score, reason: 'High baseline score — easy to rank' };
+        }
+        allIssues.push(...audit.issues);
+
+        // Keyword Research
+        const keywords = await researchKeywords(lead);
+        stats.keywords += keywords.length;
+
+        // Blog writing for hot prospects
+        if (audit.priority === 'HOT_LEAD') {
+          const topKeyword = keywords.find(k => k.priority === 'high') || keywords[0];
+          if (topKeyword) {
+            await writeBlogPost(lead, topKeyword.keyword, 'guide');
+            stats.blogs++;
+          }
+        }
+
+        // Telegram Report
+        await sendAuditReport(audit);
+
+        // API Safety Delay
+        await new Promise(r => setTimeout(r, 3000));
+      } catch (err) {
+        console.error(`❌ Failed to process lead ${lead.business_name}:`, err.message);
+      }
+    }
+
+    // 3. Final Daily Summary
+    if (allIssues.length > 0) {
+      const issueCounts = allIssues.reduce((acc, i) => { acc[i] = (acc[i] || 0) + 1; return acc; }, {});
+      stats.topIssue = Object.entries(issueCounts).sort((a, b) => b[1] - a[1])[0][0];
+    }
+    
+    await sendDailySEOSummary(stats);
+
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 04:00 PM — Scraper, Email Scraper & SEO Audit');
 

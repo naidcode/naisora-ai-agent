@@ -381,12 +381,12 @@ async function getReadyLeads(rawLeads) {
     }
 
     if (finalLeads.length > 0) {
-      const { error } = await db.from("leads").insert(finalLeads);
+      const { data: savedLeads, error } = await db.from("leads").insert(finalLeads).select();
       if (error) {
         console.error("❌ Error saving new leads:", error.message);
       } else {
         console.log(
-          `\n💾 Saved ${finalLeads.length} new leads to Supabase`,
+          `\n💾 Saved ${savedLeads?.length || 0} new leads to Supabase`,
         );
       }
     } else {

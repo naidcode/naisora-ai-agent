@@ -100,7 +100,24 @@ async function sendEveningDashboard() {
       .select('*', { count: 'exact', head: true })
       .gte('processed_at', todayISO);
 
-    // 2. Pipeline Status
+    // 2. SEO Audit Stats Today
+    const { data: audits } = await supabase
+      .from('seo_audits')
+      .select('*')
+      .gte('audited_at', todayISO);
+
+    const avgScore = audits.length > 0 ? Math.round(audits.reduce((acc, a) => acc + a.total_score, 0) / audits.length) : 0;
+    const hotProspects = audits.filter(a => a.total_score < 40).length;
+    
+    // Find top issue
+    const allIssues = audits.flatMap(a => a.issues || []);
+    const issueCounts = allIssues.reduce((acc, issue) => {
+      acc[issue] = (acc[issue] || 0) + 1;
+      return acc;
+    }, {});
+    const topIssue = Object.entries(issueCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'None';
+
+    // 3. Pipeline Status
     const { data: leads } = await supabase.from('leads').select('lead_category, outreach_status');
     
     const pipeline = {
@@ -111,7 +128,7 @@ async function sendEveningDashboard() {
       converted: leads.filter(l => l.outreach_status === 'client').length
     };
 
-    // 3. Top Lead
+    // 4. Top Lead
     const { data: topLeadArr } = await supabase
       .from('leads')
       .select('*')
@@ -131,14 +148,18 @@ ${dateStr}
 🔄 Follow ups sent: ${followups}
 🆕 New leads scraped: ${newLeads || 0}
 
+🔍 *SEO Audit Summary:*
+📊 Avg Score: ${avgScore}/100
+🔥 Hot Prospects (<40): ${hotProspects}
+⚠️ Top Issue: ${topIssue}
+✍️ Pitches Generated: ${audits.length}
+
 📊 *Pipeline Status:*
 🔴 Hot leads: ${pipeline.hot}
 🟡 Warm leads: ${pipeline.warm}
 🟢 Cold leads: ${pipeline.cold}
 💬 Replied leads: ${pipeline.replied}
 🤝 Converted clients: ${pipeline.converted}
-
-💰 Revenue this month: ₹0
 
 🏆 *Top lead today:*
 ${topLead ? `${topLead.business_name} — ${topLead.area} — ${topLead.outreach_status}` : 'None today'}`;

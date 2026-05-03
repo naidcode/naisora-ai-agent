@@ -1,71 +1,63 @@
-// modules/seo/schemaGenerator.js
-// Generates JSON-LD schema markup for restaurant websites
+/**
+ * modules/seo/schemaGenerator.js
+ * Generates proper JSON-LD schema for restaurants and FAQ pages.
+ */
 
-function generateRestaurantSchema(restaurant) {
+function generateRestaurantSchema(lead) {
   const schema = {
     "@context": "https://schema.org",
     "@type": "Restaurant",
-    "name": restaurant.name,
-    "description": `${restaurant.name} — ${restaurant.category || 'Restaurant'} in ${restaurant.area}, Bangalore`,
+    "name": lead.business_name || lead.name,
     "address": {
       "@type": "PostalAddress",
-      "streetAddress": restaurant.address || restaurant.area,
-      "addressLocality": "Bangalore",
+      "streetAddress": lead.address || "",
+      "addressLocality": lead.area || "Bangalore",
       "addressRegion": "Karnataka",
       "addressCountry": "IN"
     },
-    "telephone": restaurant.phone || "",
-    "url": restaurant.website || "",
-    "servesCuisine": restaurant.cuisine || restaurant.category || "Indian",
-    "priceRange": "₹₹",
-    "areaServed": restaurant.area + ", Bangalore",
-  };
-
-  if (restaurant.rating) {
-    schema.aggregateRating = {
+    "telephone": lead.phone || "",
+    "url": lead.website || "",
+    "servesCuisine": lead.category || "",
+    "aggregateRating": {
       "@type": "AggregateRating",
-      "ratingValue": restaurant.rating,
-      "reviewCount": restaurant.review_count || 1,
-      "bestRating": "5",
-      "worstRating": "1"
-    };
-  }
+      "ratingValue": lead.rating || 0,
+      "reviewCount": lead.review_count || 0
+    },
+    "geo": {
+      "@type": "GeoCoordinates"
+    },
+    "sameAs": [
+      lead.google_maps_url,
+      lead.instagram_handle 
+        ? `https://instagram.com/${lead.instagram_handle.replace('@','')}` 
+        : null
+    ].filter(Boolean)
+  };
 
-  return JSON.stringify(schema, null, 2);
+  return schema;
 }
 
-function generateLocalBusinessSchema(business) {
+/**
+ * Generate FAQ schema from blog FAQ list
+ */
+function generateFAQSchema(faqs) {
+  if (!faqs || !Array.isArray(faqs)) return null;
+
   return {
     "@context": "https://schema.org",
-    "@type": "LocalBusiness",
-    "name": business.name,
-    "url": business.website,
-    "telephone": business.phone,
-    "address": {
-      "@type": "PostalAddress",
-      "addressLocality": "Bangalore",
-      "addressRegion": "Karnataka",
-      "addressCountry": "IN"
-    }
+    "@type": "FAQPage",
+    "mainEntity": faqs.map(faq => ({
+      "@type": "Question",
+      "name": faq.q || faq.question,
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": faq.a || faq.answer
+      }
+    }))
   };
 }
 
-function generateBlogPostSchema(post, restaurant) {
-  return {
-    "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    "headline": post.title,
-    "author": {
-      "@type": "Organization",
-      "name": restaurant.name
-    },
-    "publisher": {
-      "@type": "Organization",
-      "name": restaurant.name
-    },
-    "datePublished": post.date || new Date().toISOString(),
-    "description": post.excerpt || post.title
-  };
-}
-
-module.exports = { generateRestaurantSchema, generateLocalBusinessSchema, generateBlogPostSchema };
+module.exports = {
+  generateRestaurantSchema,
+  generateFAQSchema
+};

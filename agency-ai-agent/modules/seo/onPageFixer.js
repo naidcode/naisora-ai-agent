@@ -1,7 +1,7 @@
 // modules/seo/onPageFixer.js
 // Fixes on-page SEO issues via WordPress REST API
 
-const { route } = require('../../config/llmRouter');
+const { askClaude } = require('../../config/claude');
 const { updatePageMeta, getAllPages } = require('../wordpress/wpConnector');
 
 async function fixOnPageIssues(client, auditData) {
@@ -21,7 +21,7 @@ Restaurant: ${client.business_name}, ${client.area}, Bangalore
 Category: ${client.category || 'restaurant'}
 Return only the meta description text.`;
 
-    const metaDesc = await route('seo_audit', prompt, null, 100);
+    const metaDesc = await askClaude(prompt);
 
     const pages = await getAllPages(client.wp_site_url, client.wp_username, client.wp_app_password);
     if (pages.length > 0) {

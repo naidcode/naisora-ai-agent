@@ -39,13 +39,32 @@ async function writeEmail(lead) {
   const priority = lead.priority || (lead.has_website ? 2 : 1);
   const area = lead.area || 'Bangalore';
   const businessName = lead.business_name;
-  const pagespeedScore = lead.pagespeed_score || 45; // Default if not found
-  const xIssues = lead.issues_found || 5; // Default if not found
+  const pagespeedScore = lead.pagespeed_score || 45; 
+  const xIssues = lead.issues_found || 5; 
+
+  // Check for SEO Audit
+  const { data: audit } = await supabase
+    .from('seo_audits')
+    .select('*')
+    .eq('lead_id', lead.id)
+    .maybeSingle();
 
   let subject = "";
   let body = "";
 
-  if (priority === 1) {
+  if (audit) {
+    subject = `Your restaurant scores ${audit.total_score}/100 on Google — Here's how to fix it`;
+    body = `Hi ${businessName} team,
+
+I ran a full E.E.A.T + GEO + AEO search audit on your restaurant, and you scored ${audit.total_score}/100.
+
+${audit.pitch}
+
+I've already prepared the full report for ${businessName}. Would you like me to send it over?
+
+— Nahid, Naisora
+naisora.com`;
+  } else if (priority === 1) {
     // Priority 1 — No Website
     subject = `${businessName} is losing customers to competitors right now`;
     body = `Hi ${businessName} team,

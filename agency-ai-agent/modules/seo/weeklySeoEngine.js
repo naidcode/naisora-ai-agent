@@ -4,7 +4,7 @@
 // Full automated SEO cycle: audit → keywords → fix → blog → report
 
 require('dotenv').config();
-const { auditWebsite } = require('./seoAudit');
+const { runFullAudit } = require('./seoAudit');
 const { researchKeywords } = require('./keywordResearch');
 const { analyseKeywords } = require('./keywordAnalyser');
 const { mapKeywordsToPages } = require('./keywordMapper');
@@ -13,6 +13,7 @@ const { runTechnicalAudit } = require('./technicalAudit');
 const { checkSitemap } = require('./sitemapManager');
 const { generateWeeklyReport } = require('./performanceReport');
 const { publishWeeklyBlogs } = require('../wordpress/blogPublisher');
+const { sendErrorAlert } = require('../../config/telegramReporter');
 const { sendMessage: sendTelegramAlert } = require('../../config/telegram');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -26,22 +27,17 @@ async function runWeeklySeoForClient(client) {
   const results = { client: client.business_name, steps: [] };
 
   try {
-    // Step 1 — Website audit
+    // Step 1 — Master Website audit
     console.log('\n📊 Step 1: Running website audit...');
     if (client.website) {
-      const audit = await auditWebsite(client);
-      results.auditScore = audit?.overall_score;
-      results.steps.push(`Audit: ${audit?.overall_score || 0}/100`);
+      const audit = await runFullAudit(client);
+      results.auditScore = audit?.total_score;
+      results.steps.push(`Audit: ${audit?.total_score || 0}/100 [Grade ${audit?.grade}]`);
     }
 
     // Step 2 — Keyword research
     console.log('\n🔍 Step 2: Researching keywords...');
-    const keywords = await researchKeywords({
-      name: client.business_name,
-      area: client.area,
-      category: client.category,
-      id: client.id,
-    });
+    const keywords = await researchKeywords(client);
     results.steps.push(`Keywords: ${keywords.length} found`);
 
     // Step 3 — Technical audit
@@ -81,7 +77,7 @@ async function runWeeklySeoForClient(client) {
 
   } catch (err) {
     console.error(`❌ Weekly SEO failed for ${client.business_name}: ${err.message}`);
-    await sendTelegramAlert(`❌ Weekly SEO failed for ${client.business_name}: ${err.message}`);
+    await sendErrorAlert('Weekly SEO Engine', err, 'critical');
   }
 
   return results;

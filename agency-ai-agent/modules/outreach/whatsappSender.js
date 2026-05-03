@@ -50,7 +50,13 @@ async function sendDailyWhatsApp() {
 
   const { data: leads } = await supabase
     .from('leads')
-    .select('*')
+    .select(`
+      *,
+      seo_audits (
+        total_score,
+        pitch
+      )
+    `)
     .eq('lead_category', 'hot')
     .neq('outreach_status', 'whatsapp_sent')
     .not('phone', 'is', null)
@@ -72,12 +78,22 @@ async function sendDailyWhatsApp() {
     console.log(`\n📱 [${i + 1}/${leads.length}] Queuing: ${lead.business_name}`);
 
     let message = "";
+    const audit = lead.seo_audits?.[0];
+    
     const priority = lead.priority || (lead.has_website ? 2 : 1);
     const area = lead.area || 'Bangalore';
     const pagespeedScore = lead.pagespeed_score || 45;
     const xIssues = lead.issues_found || 5;
 
-    if (priority === 1) {
+    if (audit) {
+      message = `Hi ${lead.business_name} 👋
+
+Your restaurant scores ${audit.total_score}/100 on Google's search and visibility audit.
+
+${audit.pitch}
+
+— Nahid, Naisora`;
+    } else if (priority === 1) {
       message = `Hi ${lead.business_name} 👋
 
 I searched for you on Google — you don't have a website yet.

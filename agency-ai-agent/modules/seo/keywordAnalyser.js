@@ -2,12 +2,12 @@
 // Analyses keyword difficulty and opportunity
 
 require('dotenv').config();
-const { route } = require('../../config/llmRouter');
+const { askClaude } = require('../../config/claude');
 
 async function analyseKeywords(keywords, restaurant) {
   const prompt = `You are an SEO expert. Analyse these keywords for a local restaurant in Bangalore.
 
-Restaurant: ${restaurant.name}, ${restaurant.area}
+Restaurant: ${restaurant.business_name || restaurant.name}, ${restaurant.area}
 Keywords: ${keywords.map(k => k.keyword || k).join(', ')}
 
 For each keyword rate:
@@ -15,13 +15,11 @@ For each keyword rate:
 - Opportunity: high/medium/low
 - Recommended action: blog post / landing page / GBP post / meta tag
 
-Return JSON array:
-[{"keyword": "...", "difficulty": "easy", "opportunity": "high", "action": "blog post"}]
-
-Return JSON only.`;
+Return JSON array only:
+[{"keyword": "...", "difficulty": "easy", "opportunity": "high", "action": "blog post"}]`;
 
   try {
-    const raw = await route('seo_audit', prompt);
+    const raw = await askClaude(prompt);
     const cleaned = raw.replace(/```json|```/g, '').trim();
     return JSON.parse(cleaned);
   } catch (err) {

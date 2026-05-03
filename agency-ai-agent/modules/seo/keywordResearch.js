@@ -1,247 +1,77 @@
-// modules/seo/keywordResearch.js
-// Naisora AI Agent — Keyword Research
-// Finds best keywords for restaurant clients using free sources
-// Sources: Google Autocomplete, Related searches, GSC data
+/**
+ * modules/seo/keywordResearch.js
+ * 4-Layer Keyword Strategy Engine
+ */
 
-require('dotenv').config();
-const axios = require('axios');
-const { route } = require('../../config/llmRouter');
-const { createClient } = require('@supabase/supabase-js');
+const { supabase } = require('../../config/database');
+const { askClaudeSonnet } = require('../../config/claude');
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
+async function researchKeywords(lead) {
+  console.log(`\n🔍 Researching 4-layer keyword strategy for: ${lead.business_name || lead.name}`);
 
-const ADVANCED_SEO_PROMPT = `
-You are an advanced SEO keyword research strategist.
+  const prompt = `
+You are a senior local SEO expert in India.
+Research keywords for this business:
 
-Your task is to find **high-ranking, low-competition, buyer-intent keywords** for blog content.
+Restaurant: ${lead.business_name || lead.name}
+Area: ${lead.area || 'Bangalore'}, Bangalore
+Category: ${lead.category || 'Restaurant'}
+Rating: ${lead.rating || 0} (${lead.review_count || 0} reviews)
+Has Website: ${lead.has_website || false}
 
----
+Generate a 4-layer keyword strategy:
 
-## INPUT YOU WILL RECEIVE:
+LAYER 1 — PRIMARY (high intent, local):
+  "best ${lead.category || 'restaurant'} in ${lead.area || 'Bangalore'}"
+  "top restaurants in ${lead.area || 'Bangalore'} Bangalore"
+  Generate 5 like these.
 
-* Business Type: {{businessType}}
-* Target Location: {{targetLocation}}
-* Niche: {{niche}}
+LAYER 2 — LONG TAIL (easy to rank):
+  "where to eat ${lead.category || 'restaurant'} near ${lead.area || 'Bangalore'}"
+  "affordable lunch near ${lead.area || 'Bangalore'} Bangalore"
+  Generate 8 like these.
 
----
+LAYER 3 — GEO KEYWORDS (AI search):
+  Questions ChatGPT would answer:
+  "which is the best ${lead.category || 'restaurant'} for families in ${lead.area || 'Bangalore'}?"
+  Generate 5 question-format keywords.
 
-## YOUR OBJECTIVE:
+LAYER 4 — AEO KEYWORDS (voice search):
+  "Hey Google, best ${lead.category || 'restaurant'} near ${lead.area || 'Bangalore'}"
+  Conversational format. Generate 5.
 
-Find keywords that:
+For each keyword return:
+{
+  "keyword": string,
+  "layer": 1|2|3|4,
+  "intent": "informational|navigational|transactional",
+  "difficulty": "easy|medium|hard",
+  "priority": "high|medium|low",
+  "content_type": "blog|landing_page|gbp_post|meta_tag|faq"
+}
 
-1. Can realistically rank on Google
-2. Match strong search intent
-3. Bring potential customers (not just traffic)
-
----
-
-## STEP 1: FIND PRIMARY KEYWORDS
-
-Generate 5–10 primary keywords that:
-
-* Include location (if local SEO)
-* Have commercial or problem-solving intent
-
-Example:
-* restaurant website design Bangalore
-* restaurant SEO services Bangalore
-* restaurant website cost Bangalore
-
----
-
-## STEP 2: FIND LONG-TAIL KEYWORDS (VERY IMPORTANT)
-
-Generate 15–25 long-tail keywords:
-
-Types to include:
-* “how to…” keywords
-* “best…” keywords
-* “cost…” keywords
-* “near me…” keywords
-* “vs…” comparison keywords
-
-Example:
-* how to create restaurant website in Bangalore
-* best restaurant website designers in Bangalore
-* Zomato vs own website for restaurants
-* restaurant website cost in Bangalore 2026
-
----
-
-## STEP 3: ANALYZE SEARCH INTENT
-
-For each keyword, label:
-* Informational
-* Commercial
-* Transactional
-
----
-
-## STEP 4: KEYWORD DIFFICULTY FILTER
-
-Select only keywords that:
-* Have low to medium competition
-* Are not dominated by huge brands
-
----
-
-## STEP 5: CLUSTER KEYWORDS
-
-Group keywords into topics:
-
-Example:
-Cluster 1: Restaurant Website
-Cluster 2: Restaurant SEO
-Cluster 3: Cost & Pricing
-Cluster 4: Comparisons (Zomato vs Website)
-
----
-
-## STEP 6: COMPETITOR GAP ANALYSIS
-
-* Analyze top 5 Google results for each keyword
-* Identify:
-  * What they are missing
-  * Weak sections
-  * Content gaps
-
----
-
-## STEP 7: FINAL OUTPUT FORMAT
-
-Return:
-1. Primary Keywords
-2. Long-tail Keywords
-3. Keyword Clusters
-4. Search Intent for each
-5. Top 3 easiest keywords to rank
-6. Blog topic suggestions based on clusters
-
----
-
-## IMPORTANT RULES:
-
-* DO NOT give generic keywords
-* DO NOT give high-competition keywords only
-* Focus on ranking opportunity + buyer intent
-* Prioritize keywords that can bring clients
-
----
-
-## FINAL CHECK:
-
-Ask yourself:
-* Can a new website rank for this keyword?
-* Does this keyword bring business, not just traffic?
-
-If not → remove it.
-
----
-
-Now begin keyword research.
+Return JSON array only. No explanation.
 `;
 
-// ─── Google Autocomplete (free, no key needed) ────────────────────────────────
-async function getAutocomplete(seed) {
   try {
-    const url = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(seed)}&hl=en-IN`;
-    const response = await axios.get(url, { timeout: 5000 });
-    return response.data[1] || [];
+    const raw = await askClaudeSonnet(prompt);
+    const keywords = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    
+    // Save to Supabase
+    const { error } = await supabase.from('keyword_research').upsert({
+      lead_id: lead.id,
+      keywords,
+      researched_at: new Date().toISOString()
+    });
+    
+    if (error) console.error('❌ Keyword Save Error:', error.message);
+
+    console.log(`✅ Keyword Research Complete: ${keywords.length} keywords found.`);
+    return keywords;
   } catch (err) {
+    console.error('❌ Keyword Research Failed:', err.message);
     return [];
   }
 }
 
-// ─── Generate keyword ideas for a restaurant ─────────────────────────────────
-async function researchKeywords(restaurant) {
-  console.log(`\n🔍 Researching keywords for ${restaurant.name}...`);
-
-  const seeds = [
-    `${restaurant.category || 'restaurant'} in ${restaurant.area} Bangalore`,
-    `best ${restaurant.category || 'restaurant'} ${restaurant.area}`,
-    `${restaurant.name}`,
-    `food delivery ${restaurant.area} Bangalore`,
-    `${restaurant.category || 'restaurant'} near me Bangalore`,
-  ];
-
-  const allKeywords = new Set();
-
-  for (const seed of seeds) {
-    const suggestions = await getAutocomplete(seed);
-    suggestions.forEach(s => allKeywords.add(s));
-    await new Promise(r => setTimeout(r, 500));
-  }
-
-  const keywordList = [...allKeywords].slice(0, 30);
-
-  // Use the advanced strategist prompt
-  // We append a JSON instruction to the end to make it machine-readable
-  const machinePrompt = ADVANCED_SEO_PROMPT
-    .replace('{{businessType}}', restaurant.category || 'Restaurant')
-    .replace('{{targetLocation}}', restaurant.area || 'Bangalore')
-    .replace('{{niche}}', restaurant.category || 'Restaurants, cafes, cloud kitchens') +
-    `\n\n--- ADDITIONAL INPUT ---\nAutocomplete suggestions found: ${keywordList.join(', ')}\n\n` +
-    `IMPORTANT: Return your entire response as a valid JSON object with two keys:\n` +
-    `1. "full_report": (Your complete 7-step analysis in Markdown format)\n` +
-    `2. "extracted_keywords": (A simple JSON array of the top 15 keywords found: ["keyword1", "keyword2", ...])\n\n` +
-    `Return JSON only.`;
-
-  try {
-    const raw = await route('seo_audit', machinePrompt, null, 3000);
-    const cleaned = raw.replace(/```json|```/g, '').trim();
-    const result = JSON.parse(cleaned);
-    
-    // Save to Supabase
-    if (restaurant.id) {
-      await supabase.from('seo_reports').insert({
-        lead_id: restaurant.id,
-        report_type: 'keyword_research_advanced',
-        report_data: { 
-          report: result.full_report, 
-          keywords: result.extracted_keywords,
-          seeds, 
-          total_found: allKeywords.size 
-        },
-        summary: `Advanced keyword research completed for ${restaurant.name}`,
-      });
-    }
-
-    console.log(`✅ Advanced keyword research complete — Found ${result.extracted_keywords.length} keywords`);
-    
-    // Return the array for backwards compatibility
-    const keywordsArray = result.extracted_keywords.map(k => ({
-      keyword: k,
-      intent: 'transactional', // default for advanced keywords
-      priority: 'high'
-    }));
-    
-    // Attach the full report to the array as a property just in case
-    keywordsArray.fullReport = result.full_report;
-    
-    return keywordsArray;
-  } catch (err) {
-    console.error('Advanced Keyword analysis failed:', err.message);
-    return keywordList.slice(0, 10).map(k => ({ keyword: k, intent: 'informational', priority: 'medium', reason: 'Autocomplete suggestion' }));
-  }
-}
-
-// ─── Advanced Research using the new strategist prompt ────────────────────────
-async function performAdvancedResearch(businessType, location, niche) {
-  console.log(`\n🚀 Performing Advanced SEO Keyword Research for ${businessType} in ${location}...`);
-
-  const prompt = ADVANCED_SEO_PROMPT
-    .replace('{{businessType}}', businessType)
-    .replace('{{targetLocation}}', location)
-    .replace('{{niche}}', niche);
-
-  try {
-    const response = await route('seo_audit', prompt, null, 3000);
-    console.log(`✅ Advanced research complete.`);
-    return response;
-  } catch (err) {
-    console.error('Advanced research failed:', err.message);
-    return null;
-  }
-}
-
-module.exports = { researchKeywords, getAutocomplete, performAdvancedResearch };
+module.exports = { researchKeywords };
