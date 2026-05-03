@@ -68,7 +68,7 @@ function nameSimilarity(a, b) {
 async function fetchExistingLeads() {
   const { data, error } = await supabase
     .from("leads")
-    .select("id, business_name, phone, area, outreach_status, lead_category")
+    .select("id, business_name, phone, area, outreach_status, lead_category, place_id")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -82,8 +82,18 @@ async function fetchExistingLeads() {
 // ─── Check a single lead against existing leads ───────────────────────────────
 function checkDuplicate(newLead, existingLeads) {
   for (const existing of existingLeads) {
+    // Layer 0: Place ID match (strongest signal)
+    if (newLead.place_id && existing.place_id && newLead.place_id === existing.place_id) {
+      return {
+        isDuplicate: true,
+        reason: "place_id",
+        matchedId: existing.id,
+        existingStatus: existing.outreach_status,
+        label: `Place ID match: ${existing.place_id}`,
+      };
+    }
 
-    // Layer 1: Exact phone match (strongest signal)
+    // Layer 1: Exact phone match (strong signal)
     if (newLead.phone && existing.phone && newLead.phone === existing.phone) {
       return {
         isDuplicate: true,
@@ -335,13 +345,27 @@ async function getReadyLeads(rawLeads) {
       process.env.SUPABASE_SERVICE_KEY,
     );
 
-    const { error } = await db.from("leads").insert(dedupResult.newLeads);
-    if (error) {
-      console.error("❌ Error saving new leads:", error.message);
+    const finalLeads = [];
+    for (const lead of dedupResult.newLeads) {
+      const duplicate = await isDuplicate(db, lead);
+      if (duplicate) {
+        console.log(`⏭ Skipped duplicate: ${lead.business_name}`);
+        continue;
+      }
+      finalLeads.push(lead);
+    }
+
+    if (finalLeads.length > 0) {
+      const { error } = await db.from("leads").insert(finalLeads);
+      if (error) {
+        console.error("❌ Error saving new leads:", error.message);
+      } else {
+        console.log(
+          `\n💾 Saved ${finalLeads.length} new leads to Supabase`,
+        );
+      }
     } else {
-      console.log(
-        `\n💾 Saved ${dedupResult.newLeads.length} new leads to Supabase`,
-      );
+      console.log("\n⏭ All leads in this batch were duplicates. No new leads saved.");
     }
   }
 
@@ -364,6 +388,27 @@ async function getReadyLeads(rawLeads) {
   }
 
   return dedupResult;
+}
+
+async function isDuplicate(supabase, lead) {
+  if (lead.place_id) {
+    const { data } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('place_id', lead.place_id)
+      .maybeSingle(); // .single() throws if not found, .maybeSingle() returns null
+    if (data) return true;
+  }
+
+  // Fallback: check by name + area
+  const { data: nameMatch } = await supabase
+    .from('leads')
+    .select('id')
+    .ilike('business_name', (lead.business_name || lead.name || '').trim())
+    .eq('area', lead.area)
+    .maybeSingle();
+
+  return !!nameMatch;
 }
 
 module.exports = {

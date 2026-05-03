@@ -10,26 +10,19 @@ const { sendMessage } = require('../../config/telegram');
 // ─── Bangalore target areas ──────────────────────────────────────────────────
 // Covered in order of restaurant density and digital gap opportunity
 const BANGALORE_AREAS = [
-  "Koramangala",
-  "Indiranagar",
-  "HSR Layout",
-  "Jayanagar",
-  "JP Nagar",
-  "Whitefield",
-  "Electronic City",
-  "Marathahalli",
-  "Bannerghatta Road",
-  "Yelahanka",
-  "Hebbal",
-  "Rajajinagar",
-  "Malleshwaram",
-  "Basavanagudi",
-  "BTM Layout",
-  "Sarjapur Road",
-  "Bellandur",
-  "Kadugodi",
-  "Bommanahalli",
-  "Vijayanagar",
+  "Koramangala", "Indiranagar", "HSR Layout", "Jayanagar", "JP Nagar",
+  "Whitefield", "Electronic City", "Marathahalli", "Bannerghatta Road",
+  "Yelahanka", "Hebbal", "Rajajinagar", "Malleshwaram", "Basavanagudi",
+  "BTM Layout", "Sarjapur Road", "Bellandur", "Kadugodi", "Bommanahalli",
+  "Vijayanagar", "Cunningham Road", "MG Road", "Brigade Road",
+  "Lavelle Road", "Richmond Town", "Shivajinagar", "Frazer Town",
+  "Cox Town", "Benson Town", "RT Nagar", "Nagawara", "Thanisandra",
+  "Hennur", "Horamavu", "Ramamurthy Nagar", "KR Puram", "Mahadevapura",
+  "Brookefield", "Varthur", "Domlur", "Old Airport Road", "CV Raman Nagar",
+  "Kammanahalli", "Kalyan Nagar", "Sahakar Nagar", "Jalahalli", "Peenya",
+  "Tumkur Road", "Yeshwanthpur", "Magadi Road", "Kengeri", "Uttarahalli",
+  "Banashankari", "Padmanabhanagar", "Kumaraswamy Layout", "Hulimavu",
+  "Electronic City Phase 2", "Begur", "Gottigere", "Chandapura"
 ];
 
 // ─── Search types ─────────────────────────────────────────────────────────────
@@ -223,6 +216,8 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
           placeId = placeIdMatch[1];
         }
 
+        if (!placeId) continue; // skip if no ID
+
         leads.push({
           name: lead.name,
           place_id: placeId,
@@ -294,6 +289,16 @@ async function scrollResultsPanel(page, targetCount) {
   }
 }
 
+function getAreasForToday(allAreas, areasPerRun = 5) {
+  const dayIndex = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+  const startIndex = (dayIndex * areasPerRun) % allAreas.length;
+  const areas = [];
+  for (let i = 0; i < areasPerRun; i++) {
+    areas.push(allAreas[(startIndex + i) % allAreas.length]);
+  }
+  return areas;
+}
+
 // ─── Run full Bangalore scrape ────────────────────────────────────────────────
 /**
  * Main entry point — scrape all target areas and types
@@ -302,7 +307,7 @@ async function scrollResultsPanel(page, targetCount) {
  */
 async function runFullScrape(options = {}) {
   const {
-    areas = BANGALORE_AREAS.slice(0, 5), // Default: scrape 5 areas per run
+    areas = getAreasForToday(BANGALORE_AREAS, 5), // Default: scrape rotated areas
     searchTypes = ["restaurants", "cafes"],
     maxPerSearch = 15,
   } = options;

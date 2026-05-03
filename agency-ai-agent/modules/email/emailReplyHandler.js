@@ -1,4 +1,5 @@
 const Imap = require('imap');
+const { safeConnect } = require('../../agent/email/imapGuard');
 const { simpleParser } = require('mailparser');
 const fs = require('fs');
 
@@ -29,8 +30,8 @@ async function handleEmailReplies() {
   console.log('\n📧 --- Email Reply Handler (IMAP) Starting ---');
   
   const imapOptions = {
-    user: process.env.IMAP_USER || process.env.EMAIL_USER || 'hey@naisora.com',
-    password: process.env.IMAP_PASS || process.env.SMTP_PASS,
+    user: process.env.EMAIL_USER,
+    password: process.env.IMAP_PASS,
     host: process.env.IMAP_HOST || 'imap.hostinger.com',
     port: parseInt(process.env.IMAP_PORT) || 993,
     tls: true,
@@ -47,7 +48,7 @@ async function handleEmailReplies() {
 
   const imap = new Imap(imapOptions);
 
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     imap.once('ready', () => {
       imap.openBox('INBOX', false, (err, box) => {
         if (err) {
@@ -99,7 +100,8 @@ async function handleEmailReplies() {
       console.log('📧 --- IMAP Connection Closed ---');
     });
 
-    imap.connect();
+    const connection = await safeConnect(imap, sendMessage);
+    if (!connection) return resolve();
   });
 }
 

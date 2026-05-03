@@ -4,7 +4,8 @@
 // Command: node index.js
 // ============================================
 
-require('dotenv').config();
+const { loadEnv } = require('./agent/config/envLoader');
+loadEnv();
 
 const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
