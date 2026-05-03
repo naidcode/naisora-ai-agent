@@ -1,60 +1,72 @@
 // config/smtp.js
-// Naisora AI Agent — Resend Email Config (API Only)
+// Naisora AI Agent — Hostinger SMTP Email Config
+// Using nodemailer for reliability
 
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
+
+// Hostinger SMTP configuration
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.hostinger.com',
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: true, // true for 465, false for other ports
+  auth: {
+    user: process.env.EMAIL_USER || 'hey@naisora.com',
+    pass: process.env.SMTP_PASS,
+  },
+  pool: true, // Use pooled connections for better performance
+  maxConnections: 5,
+  maxMessages: 100
+});
 
 /**
- * Initialize Resend client
- * Uses RESEND_API_KEY from .env
- */
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-/**
- * Sends an email using Resend API
+ * Sends an email using Hostinger SMTP
  * @param {string} to - Recipient email
  * @param {string} subject - Email subject
- * @param {string} html - Email body (HTML)
+ * @param {string} body - Email body (HTML or Plain Text)
  */
-async function sendEmail(to, subject, html) {
+async function sendEmail(to, subject, body) {
+  console.log(`✉️ Preparing to send email to: ${to}`);
+  
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'Nahid from Naisora <hello@naisora.com>',
+    const mailOptions = {
+      from: `"Nahid from Naisora" <${process.env.EMAIL_USER || 'hey@naisora.com'}>`,
       to: to,
       subject: subject,
-      html: html
-    });
-    
-    if (error) {
-      console.error('❌ Resend Error:', error.message);
-      throw new Error(error.message);
-    }
-    
-    return data;
+      html: body, // Assume HTML
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email sent: ${info.messageId}`);
+    return info;
   } catch (error) {
-    console.error('❌ Email Sending Failed (Resend):', error.message);
+    console.error('❌ SMTP Email Sending Failed:', error.message);
     throw error;
   }
 }
 
 /**
- * Tests the Resend API connection
+ * Tests the SMTP connection
  */
 async function testConnection() {
-  if (!process.env.RESEND_API_KEY) {
-    console.error('❌ RESEND_API_KEY missing in .env');
-    return false;
-  }
+  console.log('📡 Testing Hostinger SMTP connection...');
   
-  if (!process.env.RESEND_API_KEY.startsWith('re_')) {
-    console.error('❌ Invalid RESEND_API_KEY — must start with re_');
+  if (!process.env.SMTP_PASS) {
+    console.error('❌ SMTP_PASS missing in .env');
     return false;
   }
 
-  console.log('✅ Email connected via Resend API');
-  return true;
+  try {
+    await transporter.verify();
+    console.log('✅ Hostinger SMTP connected successfully');
+    return true;
+  } catch (error) {
+    console.error('❌ Hostinger SMTP Connection Failed:', error.message);
+    return false;
+  }
 }
 
 module.exports = { 
   sendEmail,
-  testConnection
+  testConnection,
+  transporter
 };

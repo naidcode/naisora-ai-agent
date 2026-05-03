@@ -7,6 +7,13 @@
 require('dotenv').config();
 
 const IS_SERVER = process.env.SERVER_MODE === 'true' || !process.stdin.isTTY;
+
+if (IS_SERVER) {
+  console.log('🚀 SERVER MODE ACTIVE — All jobs running');
+} else {
+  console.log('💻 LOCAL MODE — Interactive menu active');
+}
+
 const { testConnection: testClaude } = require("./config/claude");
 const { testConnection: testDatabase } = require("./config/database");
 const { testConnection: testEmail } = require("./config/smtp");
@@ -321,7 +328,7 @@ async function startAgent() {
   try {
     results.email = await testEmail();
   } catch (e) {
-    console.error("❌ Email failed — check RESEND_API_KEY in .env");
+    console.error("❌ Email failed — check SMTP_HOST, EMAIL_USER, and SMTP_PASS in .env");
   }
 
   try {
@@ -342,7 +349,7 @@ async function startAgent() {
     `  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📧 Email:        ${results.email ? "✅ Resend Ready" : "❌ Resend Failed"}`,
+    `  📧 Email:        ${results.email ? "✅ Hostinger Ready" : "❌ Hostinger Failed"}`,
   );
   console.log(
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,

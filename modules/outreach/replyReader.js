@@ -101,45 +101,61 @@ async function triggerCallBooking(lead, replyText) {
 
 // ─── Main reply check function ────────────────────────────────────────────────
 async function checkReplies() {
-  console.log('\n📬 Checking WhatsApp replies via UltraMsg...');
+  console.log('🚀 checkReplies started');
+  try {
+    console.log('\n📬 Checking WhatsApp replies via UltraMsg...');
 
-  const replies = await fetchUltraMsgReplies();
+    const replies = await fetchUltraMsgReplies();
 
-  if (replies.length === 0) {
-    console.log('   No new replies found.');
+    if (replies.length === 0) {
+      console.log('   No new replies found.');
+      console.log('✅ checkReplies finished');
+      return [];
+    }
+
+    console.log(`   Found ${replies.length} recent messages`);
+    const newReplies = [];
+
+    for (const message of replies) {
+      try {
+        const alreadySaved = await replyAlreadySaved(message.id);
+        if (alreadySaved) continue;
+
+        const fromPhone = message.from.split('@')[0];
+        const lead = await matchReplyToLead(fromPhone);
+        if (!lead) {
+          console.log(`   ⚠️  Unknown number: ${fromPhone} — skipping`);
+          continue;
+        }
+
+        await saveReply(lead, message);
+        await triggerCallBooking(lead, message.body);
+
+        console.log(`   💬 Reply from ${lead.business_name}: "${message.body.substring(0, 60)}..."`);
+        newReplies.push({ lead, message: message.body });
+      } catch (msgErr) {
+        console.error(`   ❌ Error processing message ${message.id}:`, msgErr.message);
+      }
+    }
+
+    if (newReplies.length > 0) {
+      console.log(`\n✅ Saved ${newReplies.length} new replies — triggering analyser...`);
+      const { analyseReply } = require('./replyAnalyser');
+      for (const { lead, message } of newReplies) {
+        try {
+          await analyseReply(lead, message);
+        } catch (analyserErr) {
+          console.error(`   ❌ Analyser error for ${lead.business_name}:`, analyserErr.message);
+        }
+      }
+    }
+
+    console.log('✅ checkReplies finished');
+    return newReplies;
+  } catch (err) {
+    console.error('💥 Fatal error in checkReplies:', err.message);
     return [];
   }
-
-  console.log(`   Found ${replies.length} recent messages`);
-  const newReplies = [];
-
-  for (const message of replies) {
-    const alreadySaved = await replyAlreadySaved(message.id);
-    if (alreadySaved) continue;
-
-    const fromPhone = message.from.split('@')[0];
-    const lead = await matchReplyToLead(fromPhone);
-    if (!lead) {
-      console.log(`   ⚠️  Unknown number: ${fromPhone} — skipping`);
-      continue;
-    }
-
-    await saveReply(lead, message);
-    await triggerCallBooking(lead, message.body);
-
-    console.log(`   💬 Reply from ${lead.business_name}: "${message.body.substring(0, 60)}..."`);
-    newReplies.push({ lead, message: message.body });
-  }
-
-  if (newReplies.length > 0) {
-    console.log(`\n✅ Saved ${newReplies.length} new replies — triggering analyser...`);
-    const { analyseReply } = require('./replyAnalyser');
-    for (const { lead, message } of newReplies) {
-      await analyseReply(lead, message);
-    }
-  }
-
-  return newReplies;
 }
 
 module.exports = { checkReplies, triggerCallBooking };

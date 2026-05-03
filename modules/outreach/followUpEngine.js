@@ -10,6 +10,7 @@ const { sendScraperFollowUpEmail } = require('../email/emailSender');
  * Checks for leads that need follow-up across all channels
  */
 async function runFollowUpEngine() {
+  console.log('🚀 runFollowUpEngine started');
   console.log('\n🔄 --- Starting Follow Up Engine ---');
   const today = new Date();
   const twoDaysAgo = new Date(today.getTime() - (2 * 24 * 60 * 60 * 1000)).toISOString();
@@ -24,83 +25,79 @@ async function runFollowUpEngine() {
 
   try {
     // 1. Email Follow Ups
-    const { data: emailLeads } = await supabase
+    console.log('📧 Checking Email follow-ups...');
+    const { data: emailLeads, error: emailError } = await supabase
       .from('leads')
       .select('*')
       .eq('outreach_status', STATUS.CONTACTED)
       .lte('last_contacted_at', twoDaysAgo);
 
-    for (const lead of emailLeads || []) {
-      const prompt = `Write a short, friendly follow-up email to ${lead.business_name}. 
+    if (emailError) {
+      console.error('❌ Error fetching email leads:', emailError.message);
+    } else {
+      for (const lead of emailLeads || []) {
+        try {
+          const prompt = `Write a short, friendly follow-up email to ${lead.business_name}. 
 We messaged them 2 days ago about their ${lead.lead_type.replace('_', ' ')}.
 Tone: natural, non-pushy, helpful. 
 Max 3-4 lines. 
 Sign as Nahid.`;
-      const message = await askClaude(prompt);
-      await sendEmail(lead.email, `Checking in: ${lead.business_name}`, message);
-      
-      await supabase.from('leads').update({
-        outreach_status: STATUS.FOLLOWUP_1,
-        last_contacted_at: new Date().toISOString()
-      }).eq('id', lead.id);
+          const message = await askClaude(prompt);
+          await sendEmail(lead.email, `Checking in: ${lead.business_name}`, message);
+          
+          await supabase.from('leads').update({
+            outreach_status: STATUS.FOLLOWUP_1,
+            last_contacted_at: new Date().toISOString()
+          }).eq('id', lead.id);
 
-      stats.email++;
-      stats.leads.push({ name: lead.business_name, area: lead.area, channel: 'Email', type: lead.lead_type });
+          stats.email++;
+          stats.leads.push({ name: lead.business_name, area: lead.area, channel: 'Email', type: lead.lead_type });
+          console.log(`✅ Email follow-up sent to ${lead.business_name}`);
+        } catch (e) {
+          console.error(`❌ Failed email follow-up for ${lead.business_name}:`, e.message);
+        }
+      }
     }
 
     // 2. WhatsApp Follow Ups
-    const { data: waLeads } = await supabase
+    console.log('📱 Checking WhatsApp follow-ups...');
+    const { data: waLeads, error: waError } = await supabase
       .from('leads')
       .select('*')
       .eq('outreach_status', STATUS.WHATSAPP_SENT)
       .lte('last_contacted_at', twoDaysAgo);
 
-    for (const lead of waLeads || []) {
-      const prompt = `Write a short WhatsApp follow-up to ${lead.business_name}. 
+    if (waError) {
+      console.error('❌ Error fetching WhatsApp leads:', waError.message);
+    } else {
+      for (const lead of waLeads || []) {
+        try {
+          const prompt = `Write a short WhatsApp follow-up to ${lead.business_name}. 
 2 days since first message. 
 Tone: casual, Indian English, friendly. 
 Max 2 lines.`;
-      const message = await askClaude(prompt);
-      
-      // Add to WhatsApp queue
-      await supabase.from('whatsapp_queue').insert({
-        lead_id: lead.id,
-        phone: lead.phone,
-        message: message,
-        status: 'pending'
-      });
+          const message = await askClaude(prompt);
+          
+          // Use UltraMsg directly for follow-ups
+          const { sendWhatsAppMessage } = require('../../config/whatsapp');
+          await sendWhatsAppMessage(lead.phone, message);
 
-      await supabase.from('leads').update({
-        outreach_status: STATUS.WHATSAPP_FOLLOWUP_1,
-        last_contacted_at: new Date().toISOString()
-      }).eq('id', lead.id);
+          await supabase.from('leads').update({
+            outreach_status: STATUS.WHATSAPP_FOLLOWUP_1,
+            last_contacted_at: new Date().toISOString()
+          }).eq('id', lead.id);
 
-      stats.whatsapp++;
-      stats.leads.push({ name: lead.business_name, area: lead.area, channel: 'WhatsApp', type: lead.lead_type });
+          stats.whatsapp++;
+          stats.leads.push({ name: lead.business_name, area: lead.area, channel: 'WhatsApp', type: lead.lead_type });
+          console.log(`✅ WhatsApp follow-up sent to ${lead.business_name}`);
+        } catch (e) {
+          console.error(`❌ Failed WhatsApp follow-up for ${lead.business_name}:`, e.message);
+        }
+      }
     }
 
-    // 3. Instagram Follow Ups
-    const { data: igLeads } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('outreach_status', STATUS.INSTAGRAM_SENT)
-      .lte('last_contacted_at', twoDaysAgo);
-
-    const { loginInstagram } = require('./instagramOutreach');
-    // For IG/LI we need puppeteer, but for brevity and to avoid long runs in cron, 
-    // we'll log them as "needed" or queue them if we had a queue.
-    // For now, let's assume we have a way to run them.
-    // I'll implement a simple version that logs the intent.
-    
-    // 4. LinkedIn Follow Ups
-    const { data: liLeads } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('outreach_status', STATUS.LINKEDIN_SENT)
-      .lte('last_contacted_at', twoDaysAgo);
-
-    // [IG and LI follow-up implementation skipped here for simplicity in this artifact, 
-    // but in a real scenario, you'd use Puppeteer or queue them]
+    // 3. Instagram & LinkedIn (Skipped for now as per current logic, but adding logging)
+    console.log('📸 Instagram/LinkedIn follow-ups: skipping (manual check required)');
 
     // Send Telegram Alert
     const leadList = stats.leads.map(l => `- ${l.name} (${l.area}) — ${l.channel} — ${l.type}`).join('\n');
@@ -117,9 +114,10 @@ ${leadList || 'No follow ups sent today.'}`;
 
     await sendMessage(report);
     console.log('✅ Follow up report sent.');
+    console.log('✅ runFollowUpEngine finished');
 
   } catch (err) {
-    console.error('Follow up engine error:', err.message);
+    console.error('💥 Fatal error in follow up engine:', err.message);
   }
 }
 

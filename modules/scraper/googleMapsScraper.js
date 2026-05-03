@@ -50,6 +50,7 @@ const randomDelay = (min = 1500, max = 3500) =>
  * @returns {Array} Array of raw lead objects
  */
 async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
+  console.log(`🚀 scrapeArea started for ${area} (${searchType})`);
   const browser = await launchBrowser();
 
   const leads = [];
@@ -285,7 +286,7 @@ async function scrapeArea(area, searchType = "restaurants", maxResults = 20) {
   } finally {
     await browser.close();
   }
-
+  console.log(`✅ scrapeArea finished for ${area}`);
   return leads;
 }
 
@@ -326,6 +327,7 @@ async function scrollResultsPanel(page, targetCount) {
  * @returns {Array} Combined leads from all searches
  */
 async function runFullScrape(options = {}) {
+  console.log('🚀 runFullScrape started');
   const {
     areas = BANGALORE_AREAS.slice(0, 5), // Default: scrape 5 areas per run
     searchTypes = ["restaurants", "cafes"],
@@ -371,6 +373,7 @@ async function runFullScrape(options = {}) {
   const skippedCount = allLeads.filter(l => l.lead_type === 'skip').length;
   const savedCount = allLeads.length; // Assuming all are saved
 
+  console.log('✅ runFullScrape finished');
   return allLeads;
 }
 

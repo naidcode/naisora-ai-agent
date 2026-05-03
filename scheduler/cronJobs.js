@@ -43,17 +43,19 @@ function safeJob(name, fn) {
       console.log(`\n⏭️  [Cron] Skipping job: ${name} (Agent is STOPPED)`);
       return;
     }
-    console.log(`\n🕒 [Cron] Starting job: ${name}`);
+    const startTime = new Date().toLocaleString('en-IN', {timeZone: 'Asia/Kolkata'});
+    console.log(`\n🕒 [Cron] Starting job: ${name} at ${startTime}`);
     try {
       await fn();
-      console.log(`✅ [Cron] ${name} completed successfully.`);
+      const endTime = new Date().toLocaleString('en-IN', {timeZone: 'Asia/Kolkata'});
+      console.log(`✅ [Cron] ${name} completed successfully at ${endTime}.`);
     } catch (err) {
       console.error(`❌ [Cron] ${name} failed:`, err.message);
       await sendMessage(
         `❌ *AGENT ERROR*\n\n` +
         `Module: ${name}\n` +
         `Error: ${err.message}\n` +
-        `Time: ${new Date().toLocaleString()}\n` +
+        `Time: ${new Date().toLocaleString('en-IN', {timeZone: 'Asia/Kolkata'})}\n` +
         `Action needed: yes`
       );
     }

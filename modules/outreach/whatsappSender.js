@@ -30,7 +30,9 @@ const { writeWhatsAppMessage } = require('./whatsappWriter');
 
 // Main daily outreach
 async function sendDailyWhatsApp() {
-  if (process.env.WHATSAPP_ENABLED !== 'true') {
+  console.log('🚀 sendDailyWhatsApp started');
+  try {
+    if (process.env.WHATSAPP_ENABLED !== 'true') {
     console.log('⏭️  WhatsApp outreach disabled (WHATSAPP_ENABLED != true)');
     return;
   }
@@ -51,16 +53,24 @@ async function sendDailyWhatsApp() {
 
   console.log(`📊 Today: ${todayCount} handled, target: ${TARGET_MINIMUM}, remaining to hit target: ${remaining}\n`);
 
+  console.log('🔍 Fetching hot leads ready for WhatsApp...');
+  
   // 1. Get new hot leads
-  let { data: leads } = await supabase
+  // FIX: Use .eq('outreach_status', STATUS.NEW) to ensure we only send to fresh leads
+  // This prevents re-sending to leads that are already in followup or skipped
+  let { data: leads, error: leadError } = await supabase
     .from('leads')
     .select('*')
     .eq('lead_category', 'hot')
-    .neq('outreach_status', STATUS.WHATSAPP_SENT)
-    .neq('outreach_status', STATUS.SKIPPED)
+    .eq('outreach_status', STATUS.NEW)
     .not('phone', 'is', null)
     .order('lead_score', { ascending: false })
     .limit(remaining);
+
+  if (leadError) {
+    console.error('❌ Error fetching leads:', leadError.message);
+    return;
+  }
 
   let followUpsUsed = 0;
 
@@ -170,11 +180,17 @@ async function sendDailyWhatsApp() {
     `🟢 Weak SEO: ${weakSeoLeads}\n\n` +
     `*Leads messaged:*\n${leadsMessaged || 'None'}`
   );
+    console.log('✅ sendDailyWhatsApp finished');
+  } catch (err) {
+    console.error('💥 Fatal error in sendDailyWhatsApp:', err.message);
+  }
 }
 
 // Follow-up for leads (Day 3)
 async function sendFollowUp() {
-  if (process.env.WHATSAPP_ENABLED !== 'true') return;
+  console.log('🚀 sendFollowUp started');
+  try {
+    if (process.env.WHATSAPP_ENABLED !== 'true') return;
 
   const todayCount = await getTodayCount();
   const remaining = DAILY_LIMIT - todayCount;
@@ -252,8 +268,12 @@ async function sendFollowUp() {
   }
 
   console.log(`✅ Follow-ups queued: ${queued}`);
-  if (queued > 0) {
-    await sendMessage(`🔄 Follow-ups queued: ${queued} WhatsApp messages`);
+    if (queued > 0) {
+      await sendMessage(`🔄 Follow-ups queued: ${queued} WhatsApp messages`);
+    }
+    console.log('✅ sendFollowUp finished');
+  } catch (err) {
+    console.error('💥 Fatal error in sendFollowUp:', err.message);
   }
 }
 

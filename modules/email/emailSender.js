@@ -26,8 +26,10 @@ if (fs.existsSync('.env')) {
 // Call this every morning at 10 AM
 // ============================================
 async function sendDailyColdEmails() {
-  const TARGET_MINIMUM = 50;
-  console.log('\n📬 Starting daily email send...');
+  console.log('🚀 sendDailyColdEmails started');
+  try {
+    const TARGET_MINIMUM = 50;
+    console.log('\n📬 Starting daily email send...');
   console.log('Time:', new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }));
   
   // 1. Get new leads
@@ -146,7 +148,12 @@ async function sendDailyColdEmails() {
     `*Hot leads emailed today:*\n${hotLeadsEmailed || 'None'}`
   );
 
+  console.log('✅ sendDailyColdEmails finished');
   return { sent, failed, gap_filled: followUpsUsed };
+  } catch (err) {
+    console.error('💥 Fatal error in sendDailyColdEmails:', err.message);
+    return { sent: 0, failed: 0, gap_filled: 0 };
+  }
 }
 
 async function findEmailOnWebsite(url) {
