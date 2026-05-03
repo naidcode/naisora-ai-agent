@@ -39,21 +39,22 @@ const { runSelfImprovement } = require('../brain/selfImprover');
 // ─── Helper: safeJob ──────────────────────────────────────────────────────────
 function safeJob(name, fn) {
   return async () => {
+    const indiaTime = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
     if (isStopped()) {
-      console.log(`\n⏭️  [Cron] Skipping job: ${name} (Agent is STOPPED)`);
+      console.log(`\n⏭️  [Cron] [${indiaTime}] Skipping job: ${name} (Agent is STOPPED)`);
       return;
     }
-    console.log(`\n🕒 [Cron] Starting job: ${name}`);
+    console.log(`\n🕒 [Cron] [${indiaTime}] Starting job: ${name}`);
     try {
       await fn();
-      console.log(`✅ [Cron] ${name} completed successfully.`);
+      console.log(`✅ [Cron] [${indiaTime}] ${name} completed successfully.`);
     } catch (err) {
-      console.error(`❌ [Cron] ${name} failed:`, err.message);
+      console.error(`❌ [Cron] [${indiaTime}] ${name} failed:`, err.message);
       await sendMessage(
         `❌ *AGENT ERROR*\n\n` +
         `Module: ${name}\n` +
         `Error: ${err.message}\n` +
-        `Time: ${new Date().toLocaleString()}\n` +
+        `Time: ${indiaTime}\n` +
         `Action needed: yes`
       );
     }

@@ -45,7 +45,13 @@ const { runFollowUpEngine } = require("./modules/outreach/followUpEngine");
 const { isStopped, stopAgent, startAgent: resumeAgent } = require("./system/masterSwitch");
 
 // ─── Detect if running in Server Mode (no interactive menu) ─────────────
-const IS_SERVER = process.env.SERVER_MODE === 'true';
+const IS_SERVER = process.env.SERVER_MODE === 'true' || !process.stdin.isTTY;
+
+if (IS_SERVER) {
+  console.log('🚀 SERVER MODE ACTIVE — All jobs running');
+} else {
+  console.log('💻 LOCAL MODE — Interactive menu active');
+}
 
 // ============================================
 // INTERACTIVE MENU (local only — skipped on Railway)
@@ -314,7 +320,7 @@ async function startAgent() {
   try {
     results.email = await testEmail();
   } catch (e) {
-    console.error("❌ Email failed — check RESEND_API_KEY in .env");
+    console.error("❌ Email failed — check SMTP credentials in .env");
   }
 
   try {
@@ -335,7 +341,7 @@ async function startAgent() {
     `  🗃️  Database:     ${results.database ? "✅ Connected" : "❌ Failed"}`,
   );
   console.log(
-    `  📧 Email:        ${results.email ? "✅ Resend Ready" : "❌ Resend Failed"}`,
+    `  📧 Email:        ${results.email ? "✅ Hostinger Ready" : "❌ Hostinger Failed"}`,
   );
   console.log(
     `  📲 Telegram:     ${results.telegram ? "✅ Connected" : "❌ Failed"}`,
