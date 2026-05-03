@@ -10,19 +10,27 @@ const { sendMessage } = require('../../config/telegram');
 // ─── Bangalore target areas ──────────────────────────────────────────────────
 // Covered in order of restaurant density and digital gap opportunity
 const BANGALORE_AREAS = [
-  "Koramangala", "Indiranagar", "HSR Layout", "Jayanagar", "JP Nagar",
-  "Whitefield", "Electronic City", "Marathahalli", "Bannerghatta Road",
-  "Yelahanka", "Hebbal", "Rajajinagar", "Malleshwaram", "Basavanagudi",
-  "BTM Layout", "Sarjapur Road", "Bellandur", "Kadugodi", "Bommanahalli",
-  "Vijayanagar", "Cunningham Road", "MG Road", "Brigade Road",
-  "Lavelle Road", "Richmond Town", "Shivajinagar", "Frazer Town",
-  "Cox Town", "Benson Town", "RT Nagar", "Nagawara", "Thanisandra",
-  "Hennur", "Horamavu", "Ramamurthy Nagar", "KR Puram", "Mahadevapura",
-  "Brookefield", "Varthur", "Domlur", "Old Airport Road", "CV Raman Nagar",
-  "Kammanahalli", "Kalyan Nagar", "Sahakar Nagar", "Jalahalli", "Peenya",
-  "Tumkur Road", "Yeshwanthpur", "Magadi Road", "Kengeri", "Uttarahalli",
-  "Banashankari", "Padmanabhanagar", "Kumaraswamy Layout", "Hulimavu",
-  "Electronic City Phase 2", "Begur", "Gottigere", "Chandapura"
+  "Koramangala", "Indiranagar", "HSR Layout",
+  "Jayanagar", "JP Nagar", "Whitefield",
+  "Electronic City", "Marathahalli", "Bannerghatta Road",
+  "Yelahanka", "Hebbal", "Rajajinagar",
+  "Malleshwaram", "Basavanagudi", "BTM Layout",
+  "Sarjapur Road", "Bellandur", "Kadugodi",
+  "Bommanahalli", "Vijayanagar", "Cunningham Road",
+  "MG Road", "Brigade Road", "Lavelle Road",
+  "Richmond Town", "Shivajinagar", "Frazer Town",
+  "Cox Town", "Benson Town", "RT Nagar",
+  "Nagawara", "Thanisandra", "Hennur",
+  "Horamavu", "Ramamurthy Nagar", "KR Puram",
+  "Mahadevapura", "Brookefield", "Varthur",
+  "Domlur", "Old Airport Road", "CV Raman Nagar",
+  "Kammanahalli", "Kalyan Nagar", "Sahakar Nagar",
+  "Jalahalli", "Peenya", "Yeshwanthpur",
+  "Kengeri", "Uttarahalli", "Banashankari",
+  "Padmanabhanagar", "Kumaraswamy Layout",
+  "Hulimavu", "Gottigere", "Chandapura",
+  "Begur", "Electronic City Phase 2", "Hoskote",
+  "Devanahalli", "Anekal"
 ];
 
 // ─── Search types ─────────────────────────────────────────────────────────────

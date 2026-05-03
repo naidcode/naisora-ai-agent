@@ -324,6 +324,31 @@ async function markAsContacted(leadId, channel = "whatsapp") {
 
 // ─── Full pipeline: Scrape → Process → Deduplicate → Return ready leads ───────
 // This is the function cronJobs.js calls
+async function isDuplicate(supabase, lead) {
+  // Check by place_id first (most reliable)
+  if (lead.place_id) {
+    const { data } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('place_id', lead.place_id)
+      .maybeSingle();
+    if (data) return true;
+  }
+
+  // Fallback: name + area match
+  const nameToCheck = lead.business_name || lead.name || "";
+  const normalized = nameToCheck.toLowerCase().trim();
+  
+  const { data: nameMatch } = await supabase
+    .from('leads')
+    .select('id')
+    .ilike('business_name', normalized)
+    .eq('area', lead.area)
+    .maybeSingle();
+
+  return !!nameMatch;
+}
+
 async function getReadyLeads(rawLeads) {
   const { processLeads } = require("./leadProcessor");
 
@@ -349,7 +374,7 @@ async function getReadyLeads(rawLeads) {
     for (const lead of dedupResult.newLeads) {
       const duplicate = await isDuplicate(db, lead);
       if (duplicate) {
-        console.log(`⏭ Skipped duplicate: ${lead.business_name}`);
+        console.log(`⏭ Duplicate skipped: ${lead.business_name || lead.name} (${lead.area})`);
         continue;
       }
       finalLeads.push(lead);
@@ -388,27 +413,6 @@ async function getReadyLeads(rawLeads) {
   }
 
   return dedupResult;
-}
-
-async function isDuplicate(supabase, lead) {
-  if (lead.place_id) {
-    const { data } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('place_id', lead.place_id)
-      .maybeSingle(); // .single() throws if not found, .maybeSingle() returns null
-    if (data) return true;
-  }
-
-  // Fallback: check by name + area
-  const { data: nameMatch } = await supabase
-    .from('leads')
-    .select('id')
-    .ilike('business_name', (lead.business_name || lead.name || '').trim())
-    .eq('area', lead.area)
-    .maybeSingle();
-
-  return !!nameMatch;
 }
 
 module.exports = {
