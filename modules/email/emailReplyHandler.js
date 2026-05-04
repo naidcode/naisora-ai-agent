@@ -165,6 +165,8 @@ ${body.substring(0, 1000)}
   }
 }
 
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Check Gmail IMAP for unread replies from leads and auto-reply using Claude
  */
@@ -182,84 +184,112 @@ async function handleEmailReplies() {
   }
 
   console.log('\n📧 --- Email Reply Handler (IMAP) Starting ---');
-  
-  const user = process.env.IMAP_USER || 'hey@naisora.com';
-  const imapOptions = {
-    user: user,
-    password: process.env.IMAP_PASS,
-    host: process.env.IMAP_HOST || 'imap.hostinger.com',
-    port: 993,
-    tls: true,
-    tlsOptions: { rejectUnauthorized: false },
-    connTimeout: 10000,
-    authTimeout: 10000,
-    socketTimeout: 10000
-  };
 
-  if (!imapOptions.password) {
-    console.error('❌ IMAP_PASS missing in .env. Skipping IMAP.');
-    return;
-  }
-
-  const imap = new Imap(imapOptions);
-
-  return new Promise((resolve, reject) => {
-    imap.once('ready', () => {
-      imapFailureCount = 0; // Reset on success
-      imap.openBox('INBOX', false, (err, box) => {
-        if (err) {
-          imap.end();
-          return reject(err);
+  const connectIMAP = () => {
+    return new Promise((resolve, reject) => {
+      const imap = new Imap({
+        user: process.env.IMAP_USER || 'hey@naisora.com',
+        password: process.env.IMAP_PASS,
+        host: process.env.IMAP_HOST || 'imap.hostinger.com',
+        port: parseInt(process.env.IMAP_PORT) || 993,
+        tls: true,
+        authTimeout: 15000,
+        socketTimeout: 30000,
+        tlsOptions: { 
+          rejectUnauthorized: false,
+          servername: 'imap.hostinger.com'
+        },
+        keepalive: {
+          interval: 10000,
+          idleInterval: 300000,
+          forceNoop: true
         }
+      });
 
-        // Search for unread messages
-        imap.search(['UNSEEN'], async (err, results) => {
+      if (!process.env.IMAP_PASS) {
+        console.error('❌ IMAP_PASS missing in .env. Skipping IMAP.');
+        return resolve();
+      }
+
+      imap.once('ready', () => {
+        imapFailureCount = 0; // Reset on success
+        imap.openBox('INBOX', false, (err, box) => {
           if (err) {
             imap.end();
             return reject(err);
           }
 
-          if (!results || results.length === 0) {
-            console.log('   No new unread emails.');
+          imap.search(['UNSEEN'], async (err, results) => {
+            if (err) {
+              imap.end();
+              return reject(err);
+            }
+
+            if (!results || results.length === 0) {
+              console.log('   No new unread emails.');
+              imap.end();
+              return resolve();
+            }
+
+            console.log(`   Found ${results.length} unread emails. Processing...`);
+
+            try {
+              for (const uid of results) {
+                await processMessage(imap, uid);
+              }
+            } catch (procErr) {
+              console.error('   Error during message processing loop:', procErr.message);
+            }
+
             imap.end();
-            return resolve();
-          }
-
-          console.log(`   Found ${results.length} unread emails. Processing...`);
-
-          for (const uid of results) {
-            await processMessage(imap, uid);
-          }
-
-          imap.end();
-          resolve();
+            resolve();
+          });
         });
       });
-    });
 
-    imap.once('error', async (err) => {
-      console.error('IMAP Error:', err.message);
+      imap.once('error', (err) => {
+        reject(err);
+      });
+
+      imap.once('end', () => {
+        console.log('📧 --- IMAP Connection Closed ---');
+      });
+
+      imap.connect();
+    });
+  };
+
+  let retries = 3;
+  let delay = 2000;
+  while (retries > 0) {
+    try {
+      await connectIMAP();
+      break;
+    } catch(err) {
+      retries--;
       imapFailureCount++;
       lastImapFailureTime = Date.now();
+      
+      console.error(`IMAP Connection Error (Attempts left: ${retries}):`, err.message);
 
-      if (imapFailureCount === 3) {
-        await sendMessage(
-          `🚨 *IMAP CRITICAL ERROR*\n\n` +
-          `Failed 3 times in a row. Pausing for 30 mins.\n` +
-          `Error: ${err.message}\n` +
-          `Time: ${new Date().toLocaleString()}`
-        );
+      if (retries === 0) {
+        if (imapFailureCount >= 3) {
+          await sendMessage(
+            `🚨 *IMAP CRITICAL ERROR*\n\n` +
+            `Failed 3 times in a row. Pausing for 30 mins.\n` +
+            `Error: ${err.message}\n` +
+            `Time: ${new Date().toLocaleString()}`
+          );
+        }
+        return;
       }
-      reject(err);
-    });
-
-    imap.once('end', () => {
-      console.log('📧 --- IMAP Connection Closed ---');
-    });
-
-    imap.connect();
-  });
+      console.log(`   Retrying IMAP connection in ${delay}ms...`);
+      await wait(delay);
+      delay *= 2;
+    }
+  }
 }
+
 
 async function processMessage(imap, uid) {
   return new Promise((resolve, reject) => {
