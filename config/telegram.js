@@ -152,8 +152,20 @@ async function getChatId() {
   }
 }
 
+const sentAlerts = new Set();
+
+async function sendTelegramOnce(key, message) {
+  if (sentAlerts.has(key)) return;
+  sentAlerts.add(key);
+  await sendMessage(message);
+  
+  // Reset after 24 hours so new day gets fresh alert
+  setTimeout(() => sentAlerts.delete(key), 24 * 60 * 60 * 1000);
+}
+
 module.exports = {
   sendMessage,
+  sendTelegramOnce,
   sendHotLeadAlert,
   sendWeeklyReport,
   sendDailySummary,
@@ -161,3 +173,4 @@ module.exports = {
   testConnection,
   getChatId,
 };
+

@@ -68,6 +68,16 @@ const { runLinkedInOutreach } = require('../modules/outreach/linkedinOutreach');
 const { checkInstagramReplies } = require('../modules/outreach/instagramAutoReply');
 const { checkLinkedInReplies } = require('../modules/outreach/linkedinAutoReply');
 
+// Global health status
+let healthStatus = {
+  supabase: true,
+  imap: true,
+  claude: true,
+  telegram: true
+};
+
+const { runHealthCheck } = require('../healthCheck');
+
 // ─── Start All Jobs ───────────────────────────────────────────────────────────
 function startAllJobs() {
   console.log('\n╔══════════════════════════════════════════════╗');
@@ -75,23 +85,38 @@ function startAllJobs() {
   console.log('║         Target: 50 Leads / Day Volume        ║');
   console.log('╚══════════════════════════════════════════════╝\n');
 
-  // 0. HEALTH MONITOR — 7:00 AM
-  cron.schedule('0 7 * * *', safeJob('Daily Health Monitor', async () => {
-    await runHealthCheck();
+  // 0. COMPREHENSIVE HEALTH CHECK — 8:00 AM
+  cron.schedule('0 8 * * *', safeJob('Daily Health Check', async () => {
+    const results = await runHealthCheck();
+    
+    // Update global health status based on failures
+    healthStatus.supabase = !results.failed.some(f => f.toLowerCase().includes('supabase'));
+    healthStatus.imap = !results.failed.some(f => f.toLowerCase().includes('imap'));
+    healthStatus.claude = !results.failed.some(f => f.toLowerCase().includes('claude'));
+    
+    if (results.failed.length > 0) {
+      console.log(`🚨 HEALTH CHECK FAILED: ${results.failed.length} critical issues found.`);
+    }
   }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ 07:00 AM — Daily Health Monitor');
+  console.log('✅ 08:00 AM — Daily Health Check');
 
   // 0.1 EMAIL REPLY HANDLER — Every 30 minutes
   cron.schedule('*/30 * * * *', safeJob('Email Reply Handler', async () => {
+    if (!healthStatus.imap) {
+      console.log('⏭️ Skipping Email Reply Handler: IMAP is DOWN');
+      return;
+    }
     await handleEmailReplies();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ Every 30m — Email Auto-Reply Handler');
 
   // 0.2 INSTAGRAM & LINKEDIN REPLY HANDLER — Every 2 hours
   cron.schedule('0 */2 * * *', safeJob('Instagram Reply Handler', async () => {
+    if (!healthStatus.supabase) return;
     await checkInstagramReplies();
   }), { timezone: 'Asia/Kolkata' });
   cron.schedule('30 */2 * * *', safeJob('LinkedIn Reply Handler', async () => {
+    if (!healthStatus.supabase) return;
     await checkLinkedInReplies();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ Every 2h — Instagram & LinkedIn Auto-Reply Handler');
@@ -104,6 +129,10 @@ function startAllJobs() {
 
   // 2. WHATSAPP OUTREACH — 10:00 AM
   cron.schedule('0 10 * * *', safeJob('WhatsApp Outreach', async () => {
+    if (!healthStatus.supabase) {
+      console.log('⏭️ Skipping WhatsApp Outreach: Supabase is DOWN');
+      return;
+    }
     await sendDailyWhatsApp();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 10:00 AM — WhatsApp Outreach (Cold)');
@@ -116,6 +145,10 @@ function startAllJobs() {
 
   // 3. EMAIL OUTREACH — 11:00 AM
   cron.schedule('0 11 * * *', safeJob('Email Outreach', async () => {
+    if (!healthStatus.supabase || !healthStatus.imap) {
+      console.log('⏭️ Skipping Email Outreach: Supabase or IMAP is DOWN');
+      return;
+    }
     await sendDailyColdEmails();
     await sendFollowupEmails1();
     await sendFollowupEmails2();
@@ -130,6 +163,7 @@ function startAllJobs() {
 
   // 4. FOLLOW UP ENGINE — 12:00 PM
   cron.schedule('0 12 * * *', safeJob('Follow Up Engine', async () => {
+    if (!healthStatus.supabase) return;
     await runFollowUpEngine();
   }), { timezone: 'Asia/Kolkata' });
   console.log('✅ 12:00 PM — Follow Up Engine');
@@ -142,6 +176,10 @@ function startAllJobs() {
 
   // 6. SCRAPER & AUDIT — 4:00 PM
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {
+    if (!healthStatus.supabase || !healthStatus.claude) {
+      console.log('⏭️ Skipping Scraper & Audit: Supabase or Claude is DOWN');
+      return;
+    }
     const { runFullScrape } = require('../modules/scraper/googleMapsScraper');
     const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');
     const { runFullAudit } = require('../modules/seo/seoAudit');

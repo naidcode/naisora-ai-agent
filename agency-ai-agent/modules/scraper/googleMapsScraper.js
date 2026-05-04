@@ -374,4 +374,4 @@ function getAllAreas() {
   return BANGALORE_AREAS;
 }
 
-module.exports = { runFullScrape, scrapeOne, getAllAreas, BANGALORE_AREAS };
+module.exports = { runFullScrape, scrapeOne, getAllAreas, BANGALORE_AREAS, getAreasForToday };

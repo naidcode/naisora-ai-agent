@@ -15,12 +15,155 @@ if (fs.existsSync('.env')) {
 }
 
 const { supabase } = require('../../config/database');
-const { askClaudeWithSystem } = require('../../config/claude');
-const { sendMessage } = require('../../config/telegram');
+const { askClaudeWithSystem, callHaiku } = require('../../config/claude');
+const { sendMessage, sendTelegramOnce } = require('../../config/telegram');
 
 // Failure tracking
 let imapFailureCount = 0;
 let lastImapFailureTime = 0;
+
+function isAutoReply(email) {
+  const subject = (email.subject || '').toLowerCase();
+  const body = (email.body || '').toLowerCase();
+  const from = (email.from || '').toLowerCase();
+
+  // Sender patterns
+  const autoSenders = [
+    'mailer-daemon', 'noreply', 'no-reply',
+    'donotreply', 'postmaster', 'autoresponder',
+    'auto-reply', 'notifications', 'mailchannels'
+  ];
+  if (autoSenders.some(s => from.includes(s))) return true;
+
+  // Subject patterns
+  const autoSubjects = [
+    'auto reply', 'automatic reply', 'out of office',
+    'automated response', 'thank you for contacting',
+    'we have received your', 'do not reply',
+    'auto-response', 'away from office'
+  ];
+  if (autoSubjects.some(s => subject.includes(s))) return true;
+
+  // Body patterns
+  const autoPhrases = [
+    'thank you for writing in',
+    'thank you for contacting',
+    'this is an automated',
+    'this is an automatic',
+    'we will respond as soon as possible',
+    'we will get back to you',
+    'we have received your email',
+    'do not reply to this email',
+    'please do not reply',
+    'this email was sent automatically',
+    'auto-generated'
+  ];
+  if (autoPhrases.some(p => body.includes(p))) return true;
+
+  return false;
+}
+
+async function isSameMessageReceived(leadEmail, messageBody) {
+  const { data } = await supabase
+    .from('conversations')
+    .select('last_message_body, reply_count, is_closed')
+    .eq('lead_email', leadEmail)
+    .maybeSingle();
+
+  if (!data) return false;
+  if (data.is_closed) return true;
+
+  // Same message received again = auto-reply loop
+  const similarity = data.last_message_body?.trim() === messageBody?.trim();
+  if (similarity) return true;
+
+  return false;
+}
+
+async function extractDecisionMaker(email) {
+  const body = email.body || '';
+
+  // Extract emails
+  const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+  const foundEmails = body.match(emailRegex) || [];
+  
+  // Filter out the sender's own email and common noise
+  const decisionEmails = foundEmails.filter(e => 
+    !e.includes(email.from.split('@')[1]) === false &&
+    !e.toLowerCase().includes('noreply') &&
+    !e.toLowerCase().includes('naisora')
+  );
+
+  // Extract phone numbers (Indian format)
+  const phoneRegex = /(\+91|91|0)?[\s-]?[6-9]\d{9}/g;
+  const phones = body.match(phoneRegex) || [];
+
+  // Extract names near designations using Claude Haiku
+  let decisionMaker = null;
+  if (decisionEmails.length > 0 || phones.length > 0) {
+    const prompt = `
+Extract the most senior decision maker from this email text.
+Look for: General Manager, Owner, Director, Manager, Head.
+Return JSON only:
+{
+  "name": "...",
+  "designation": "...",
+  "email": "...",
+  "phone": "..."
+}
+If not found return: {}
+
+Email text:
+${body.substring(0, 1000)}
+`;
+    try {
+      const raw = await callHaiku(prompt);
+      decisionMaker = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch(e) {
+      decisionMaker = { 
+        email: decisionEmails[0] || null,
+        phone: phones[0] || null 
+      };
+    }
+  }
+
+  if (decisionMaker && (decisionMaker.email || decisionMaker.phone)) {
+    // Save to leads table
+    await supabase.from('leads')
+      .update({
+        decision_maker_name: decisionMaker.name,
+        decision_maker_email: decisionMaker.email,
+        decision_maker_phone: decisionMaker.phone,
+        decision_maker_designation: decisionMaker.designation,
+        outreach_status: 'decision_maker_found'
+      })
+      .eq('email', email.from);
+
+    // Schedule direct outreach in 24 hours
+    await supabase.from('outreach_queue').insert({
+      to_email: decisionMaker.email,
+      to_phone: decisionMaker.phone,
+      contact_name: decisionMaker.name,
+      type: 'decision_maker_outreach',
+      scheduled_for: new Date(Date.now() + 24*60*60*1000).toISOString(),
+      status: 'pending'
+    });
+
+    // Telegram alert — professional format
+    await sendMessage(`
+🎯 <b>Decision Maker Found in Auto-Reply</b>
+
+🏪 <b>Restaurant:</b> ${email.from}
+👤 <b>Name:</b> ${decisionMaker.name || 'Unknown'}
+💼 <b>Role:</b> ${decisionMaker.designation || 'Unknown'}
+📧 <b>Email:</b> ${decisionMaker.email || 'N/A'}
+📱 <b>Phone:</b> ${decisionMaker.phone || 'N/A'}
+
+⏰ Direct outreach scheduled in 24 hours
+📌 Action: Agent will contact by name directly
+    `);
+  }
+}
 
 /**
  * Check Gmail IMAP for unread replies from leads and auto-reply using Claude
@@ -128,8 +271,65 @@ async function processMessage(imap, uid) {
           const fromEmail = parsed.from.value[0].address;
           const subject = parsed.subject;
           const body = parsed.text;
+          const messageId = parsed.messageId;
+          const headers = parsed.headers ? Object.fromEntries(parsed.headers) : {};
 
           console.log(`   📩 Processing email from: ${fromEmail}`);
+
+          const emailData = {
+            from: fromEmail,
+            subject: subject,
+            body: body,
+            messageId: messageId,
+            headers: headers
+          };
+
+          // Guard 1: auto-reply detection
+          if (isAutoReply(emailData)) {
+            console.log(`   ⏭ Auto-reply detected from ${fromEmail} — extracting contacts`);
+            
+            // Extract decision maker from auto-reply body
+            await extractDecisionMaker(emailData);
+            
+            // Mark in Supabase so we never reply to this thread again
+            await supabase.from('conversations').upsert({
+              lead_email: fromEmail,
+              is_auto_reply: true,
+              is_closed: true,
+              last_message_body: body,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'lead_email' });
+
+            // Send ONE Telegram alert only (not repeated)
+            await sendTelegramOnce(
+              `auto_${fromEmail}`,
+              `⏭ Auto-reply detected\n📧 ${fromEmail}\n🔕 Thread closed`
+            );
+
+            // Mark as seen in IMAP
+            imap.addFlags(uid, ['\\Seen'], (err) => {
+              if (err) console.error('Error marking as seen:', err);
+              resolve();
+            });
+            return;
+          }
+
+          // Guard 2: same message loop detection
+          const isLoop = await isSameMessageReceived(fromEmail, body);
+          if (isLoop) {
+            console.log(`   🔄 Loop detected for ${fromEmail} — stopping`);
+            await supabase.from('conversations').upsert({
+              lead_email: fromEmail,
+              is_closed: true,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'lead_email' });
+            
+            imap.addFlags(uid, ['\\Seen'], (err) => {
+              if (err) console.error('Error marking as seen:', err);
+              resolve();
+            });
+            return;
+          }
 
           // 1. Match with lead in Supabase
           const { data: lead } = await supabase
@@ -140,7 +340,6 @@ async function processMessage(imap, uid) {
 
           if (!lead) {
             console.log(`   ⏩ Skipping email from unknown sender: ${fromEmail}`);
-            // Mark as seen anyway? Or leave it? Usually better to mark as seen if it's not a lead to avoid reprocessing.
             imap.addFlags(uid, ['\\Seen'], (err) => {
               if (err) console.error('Error marking as seen:', err);
             });
@@ -148,6 +347,52 @@ async function processMessage(imap, uid) {
           }
 
           console.log(`   🎯 Match found! Lead: ${lead.business_name}`);
+
+          // Guard 3: reply count limit
+          const { data: convo } = await supabase
+            .from('conversations')
+            .select('reply_count, is_closed')
+            .eq('lead_email', fromEmail.toLowerCase())
+            .maybeSingle();
+
+          if (convo?.is_closed) {
+            console.log(`   🔒 Conversation closed for ${fromEmail} — skipping`);
+            imap.addFlags(uid, ['\\Seen'], (err) => {
+              if (err) console.error('Error marking as seen:', err);
+              resolve();
+            });
+            return;
+          }
+
+          if ((convo?.reply_count || 0) >= 3) {
+            console.log(`   ⛔ Reply limit for ${fromEmail} — waiting for human`);
+            
+            await sendTelegramOnce(
+              `limit_${fromEmail}`,
+              `⏸ Reply limit reached\n📧 ${fromEmail}\n👤 Waiting for unique response\n💡 If they reply with unique message → agent continues`
+            );
+            
+            await supabase.from('conversations').upsert({
+              lead_email: fromEmail,
+              is_closed: true,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'lead_email' });
+
+            imap.addFlags(uid, ['\\Seen'], (err) => {
+              if (err) console.error('Error marking as seen:', err);
+              resolve();
+            });
+            return;
+          }
+
+          // Safe to reply — increment counter
+          await supabase.from('conversations').upsert({
+            lead_email: fromEmail,
+            reply_count: (convo?.reply_count || 0) + 1,
+            last_message_body: body,
+            is_closed: false,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'lead_email' });
 
           // 2. Generate Claude Sonnet response
           const systemPrompt = `You are Nahid from Naisora, a web design agency in Bangalore that builds websites and does SEO for restaurants and cafes.

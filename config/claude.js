@@ -54,4 +54,10 @@ async function testConnection() {
   console.log('✅ Sonnet:', r2);
 }
 
-module.exports = { askClaude, askClaudeSonnet, askClaudeWithSystem, testConnection };
+module.exports = { 
+  askClaude, 
+  askClaudeSonnet, 
+  askClaudeWithSystem, 
+  testConnection,
+  callHaiku: askClaude 
+};
