@@ -41,10 +41,13 @@ async function sendDailyColdEmails() {
 
   let sent = 0;
   let failed = 0;
+  let skippedNoEmail = 0;
 
   for (const lead of leads) {
-    if (!lead.email) {
-      console.log(`⚠️  Skipping ${lead.business_name} (no email)`);
+    const emailAddress = lead.email;
+    if (!emailAddress || emailAddress === 'no_email') {
+      console.log(`⚠️  Skipping ${lead.business_name} (no valid email found)`);
+      skippedNoEmail++;
       continue;
     }
     try {

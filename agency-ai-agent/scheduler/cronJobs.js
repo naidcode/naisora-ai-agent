@@ -176,20 +176,7 @@ function startAllJobs() {
 
   // 6. SCRAPER & AUDIT — 4:00 PM
   cron.schedule('0 16 * * *', safeJob('Lead Scraper & Audit', async () => {
-    if (!healthStatus.supabase || !healthStatus.claude) {
-      console.log('⏭️ Skipping Scraper & Audit: Supabase or Claude is DOWN');
-      return;
-    }
-    const { runFullScrape } = require('../modules/scraper/googleMapsScraper');
-    const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');
-    const { runFullAudit } = require('../modules/seo/seoAudit');
-    const { researchKeywords } = require('../modules/seo/keywordResearch');
-    const { writeBlogPost } = require('../modules/content/blogWriter');
-    const { sendAuditReport, sendDailySEOSummary } = require('../config/telegramReporter');
-
-    // 1. Scrape new leads
     const rawLeads = await runFullScrape({
-      searchTypes: ['restaurants', 'cafes'],
       maxPerSearch: 15
     });
     

@@ -11,7 +11,8 @@
     "agent:stop": "node scripts/stop.js",
     "agent:start": "node scripts/start.js",
     "test-email": "node -e \"require('./modules/email/emailSender').testSend()\"",
-    "test-claude": "node -e \"require('./config/claude').testConnection()\""
+    "test-claude": "node -e \"require('./config/claude').testConnection()\"",
+    "dashboard": "node dashboard-server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.20.0",

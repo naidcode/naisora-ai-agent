@@ -1,15 +1,29 @@
 // brain/blogStrategy.js
 // ═══════════════════════════════════════════════════════════════════════════════
-// Naisora AI Growth OS — PERMANENT BLOG CONTENT STRATEGY
+// Naisora AI Growth OS — MASTER SEO SYSTEM STRATEGY
 // ═══════════════════════════════════════════════════════════════════════════════
 //
 // CORE RULE: Every blog must solve a real business problem, connect to our
 // service (website + visibility), and push the reader toward action.
 //
 // This file is the SINGLE SOURCE OF TRUTH for all content generation.
-// It is loaded by: blogWriter.js, contentEngine.js, contentOptimizer.js,
-//                  blogScheduler.js
+// It follows the MASTER SEO SYSTEM PROMPT established by Nahid Pasha.
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── AGENCY CONTEXT ─────────────────────────────────────────────────────────
+const AGENCY_CONTEXT = {
+  name: 'Naisora',
+  website: 'naisora.com',
+  email: 'hey@naisora.com',
+  city: 'Bangalore, India',
+  author: 'Nahid Pasha',
+  niche: 'Web design and digital marketing for restaurants and cafes in India',
+  colors: {
+    bg: ['#0a0a0a', '#141414'],
+    accent: '#22c55e',
+    text: '#ffffff',
+  },
+};
 
 // ─── TARGET AUDIENCE ─────────────────────────────────────────────────────────
 const TARGET_AUDIENCE = {
@@ -20,300 +34,182 @@ const TARGET_AUDIENCE = {
     'Local food business owners',
   ],
   painPoints: [
-    'No website — losing customers who search online',
-    'Outdated website — making a premium restaurant look unprofessional',
-    'Not getting direct customers — over-dependent on Zomato/Swiggy commissions',
-    'Not showing on Google — invisible to nearby diners searching "near me"',
-    'Paying 30% commission to aggregators instead of getting direct orders',
-    'No online presence beyond a Zomato listing they don\'t control',
-    'Competitors with websites stealing their customers',
-  ],
-  searchBehavior: [
-    'Searches Google before trying any restaurant',
-    'Compares restaurants by their online presence',
-    'Looks for menus, photos, ambience, reviews before visiting',
-    'Uses "near me" searches to discover new places',
+    'Zomato / Swiggy take 25–30% commission on every order',
+    'Competitors ranking above them on Google',
+    'Empty tables during off-peak hours',
+    'No direct orders — fully dependent on aggregators',
+    'Customers cannot find them when searching Google',
+    'No control over their own customer data',
   ],
 };
 
 // ─── CONTENT RULES ───────────────────────────────────────────────────────────
 const CONTENT_RULES = {
-  // What EVERY blog must do
+  // What EVERY blog must do (AEO, GEO, E-E-A-T)
   mandatory: [
     'Solve a REAL business problem restaurant owners face',
-    'Connect the solution back to having a website + Google visibility',
+    'AEO: First sentence under every H2 must directly answer the topic',
+    'AEO: Use definition format: "[Thing] is [definition]."',
+    'AEO: FAQ section mandatory — minimum 5 questions',
+    'AEO: FAQ answers: 40–60 words, starts with direct answer',
+    'GEO: Write authoritative statements — no hedging ("might", "could")',
+    'GEO: Include stats with source (e.g., Google India, IAMAI, Statista)',
+    'GEO: Mention named entities clearly: "Naisora", "Bangalore", "Nahid Pasha"',
+    'E-E-A-T: Show real-world Bangalore restaurant context',
+    'E-E-A-T: Add "About the Author" section (Nahid Pasha)',
+    'Include transparent pricing ranges (Naisora\'s trust advantage)',
+    'Connect the solution back to having a website + direct orders',
     'Include at least 2 local keywords (Bangalore, specific neighborhoods)',
-    'End with a clear CTA — free audit, consultation, or portfolio link',
-    'Use simple, jargon-free language that a non-tech restaurant owner understands',
-    'Include an FAQ section (3-5 questions) for Featured Snippet potential',
+    'End with a clear CTA — email hey@naisora.com or WhatsApp',
   ],
 
   // What to NEVER do
   forbidden: [
+    'SEO', 'algorithm', 'schema', 'meta tags', 'crawl', 'backlinks', 
+    'leverage', 'synergy', 'cutting-edge', 'robust', 'scalable', 
+    'seamlessly', 'utilize', 'paradigm',
     'Generic marketing theory or abstract concepts',
-    'Advanced AI/tech jargon (hyper-personalization, machine learning, etc.)',
-    'Content that doesn\'t connect back to a real restaurant pain point',
     'Academic or corporate tone — must feel like advice from a friend',
-    'Posts without a CTA — every post must drive action',
-    'Topics that don\'t help attract restaurant/cafe owner clients',
   ],
 
-  // Content mix ratio
-  ratio: {
-    clientGenerating: 80, // 80% → directly solves problems, attracts leads
-    authorityBuilding: 20, // 20% → trend pieces that build trust and credibility
+  wordCount: {
+    min: 2000,
+    max: 2500,
+  },
+
+  meta: {
+    title: { min: 50, max: 60 },
+    description: { min: 150, max: 160 },
   },
 };
 
 // ─── MANDATORY BLOG STRUCTURE ────────────────────────────────────────────────
-// Every blog MUST follow this 7-part structure
 const BLOG_STRUCTURE = `
-## MANDATORY 7-PART BLOG STRUCTURE
+---
+title: "[H1 text — primary keyword + power word]"
+metaTitle: "[50–60 chars — keyword first]"
+metaDescription: "[150–160 chars — keyword + benefit + CTA]"
+slug: "[primary-keyword-hyphenated]"
+date: "[YYYY-MM-DD]"
+author: "Nahid Pasha"
+excerpt: "[2 sentence summary]"
+tags: ["restaurant website", "web design India", "cafe website", "Bangalore"]
+primaryKeyword: "[primary keyword]"
+wordCount: [number]
+---
 
-### 1. HOOK (Pain-Based Introduction)
-- Open with a sharp, pain-driven statement that restaurant owners immediately relate to.
-- Example: "If your restaurant doesn't have a website in 2026, you are losing customers every single day — and you probably don't even know it."
-- NO generic introductions. NO "In today's digital world..." openings.
+# [H1 with Primary Keyword]
 
-### 2. PROBLEM EXPLANATION
-- Clearly explain WHAT is happening and WHY it's a problem.
-- Use specific, relatable scenarios from a restaurant owner's daily life.
-- Example: "When someone hears about your restaurant from a friend, the first thing they do is Google it. If nothing shows up — or worse, a broken Facebook page appears — they move on."
+## [Intro — 150 words, pain-driven, include primary keyword early]
 
-### 3. REAL-WORLD IMPACT
-- Show the tangible cost of NOT solving this problem.
-- Include: lost visibility, missed customers, money going to platforms, competitor advantage.
-- Use data or specific examples: "89% of Bangalore diners research a restaurant online before visiting."
+## [H2 Section 1: Why This Problem Matters to Indian Restaurants]
+   - [Direct answer sentence immediately under H2]
+   - [AEO: definition format if applicable]
+   - [GEO: authoritative statements and stats]
 
-### 4. SIMPLE SOLUTION
-- Introduce the answer: A professional website + local Google visibility.
-- Keep it clear and non-technical.
-- Frame it as: "The fix is simpler than you think."
+## [H2 Section 2: The Solution (Direct Orders & Visibility)]
+   - [Direct answer sentence immediately under H2]
 
-### 5. PRACTICAL STEPS (3-5 Actionable Points)
-- Give 3-5 specific, immediately actionable steps the reader can take.
-- Each step should be concrete, not vague.
-- Example: "1. Claim your Google Business Profile. 2. Get a fast, mobile-friendly website with your menu. 3. Add a click-to-call button."
+## [H2 Section 3: Naisora's Process & Pricing]
+   - [Transparent pricing breakdown]
 
-### 6. SOFT SERVICE CONNECTION
-- Naturally connect the solution to what Naisora does.
-- NOT a hard sell — a helpful mention.
-- Example: "This is exactly what we help restaurants in Bangalore fix — building a modern, fast website that actually brings in customers from Google."
+## [H2 Section 4: Real Results & Local Examples]
+   - [Mention Bangalore neighborhoods]
 
-### 7. CTA (MANDATORY — Never Skip)
-- Always end with ONE clear call-to-action.
-- Options:
-  - "Get a free website audit for your restaurant → [link]"
-  - "See how your restaurant could look online → [link]"
-  - "Talk to us about your restaurant's website → [link]"
-  - "Ready to stop losing customers to competitors? Let's talk → [link]"
+## Frequently Asked Questions
+   - [Minimum 5 questions]
+   - [40-60 word answers starting with direct answer]
+
+## Ready to Get More Customers Without Paying Commission?
+   - [CTA Section with hey@naisora.com]
+
+---
+*Written by Nahid Pasha, founder of Naisora — a web design agency in Bangalore specializing in websites and digital marketing for restaurants and cafes.*
 `;
 
 // ─── SEO KEYWORD STRATEGY ────────────────────────────────────────────────────
 const SEO_STRATEGY = {
-  // Primary keywords to target across all content
   primaryKeywords: [
-    'restaurant website Bangalore',
-    'restaurant web design Bangalore',
-    'restaurant SEO Bangalore',
+    'restaurant website India',
     'cafe website design Bangalore',
-    'restaurant not getting customers',
-    'restaurant Google visibility',
-    'restaurant website cost Bangalore',
-    'restaurant digital marketing Bangalore',
+    'restaurant website cost India',
+    'digital marketing for restaurants India',
+    'direct orders restaurant India',
+    'restaurant SEO India',
   ],
-
-  // Local neighborhoods to mention (rotate across posts)
   localKeywords: [
     'Indiranagar', 'Koramangala', 'HSR Layout', 'Whitefield',
     'JP Nagar', 'Jayanagar', 'Marathahalli', 'Electronic City',
     'MG Road', 'Church Street', 'Lavelle Road', 'Sarjapur Road',
-    'Basavanagudi', 'Rajajinagar', 'Malleshwaram', 'BTM Layout',
-    'Yelahanka', 'Hebbal', 'Banashankari', 'Bellandur',
-  ],
-
-  // Long-tail keywords to weave in naturally
-  longTailKeywords: [
-    'why my restaurant is not getting customers',
-    'do restaurants need a website in 2026',
-    'restaurant website vs Zomato page',
-    'how to get more customers for my restaurant',
-    'restaurant not showing on Google',
-    'best restaurant website design India',
-    'how much does a restaurant website cost',
-    'restaurant Google Maps ranking',
-    'website for small restaurant',
-    'direct orders without Zomato commission',
   ],
 };
 
-// ─── CLIENT-GENERATING TOPIC BANK ────────────────────────────────────────────
-// These are pre-approved, high-converting blog topics (80% of content)
-const CLIENT_TOPICS = [
-  // Direct pain-point topics
-  'Why Every Restaurant in Bangalore Needs a Website in 2026',
-  'Restaurant Not Getting Customers? Here\'s the Real Reason',
-  'Zomato vs Your Own Website: What Restaurant Owners Must Know',
-  'How Restaurants Lose Customers Without Google Visibility',
-  'Restaurant Website Cost in Bangalore — Complete 2026 Guide',
-  'No Website, No Customers: The Silent Problem Killing Bangalore Restaurants',
-  '5 Signs Your Restaurant Is Losing Money Because of a Bad Website',
-  'Why Your Restaurant Doesn\'t Show Up on Google — And How to Fix It',
-  'Stop Paying 30% Commission: How a Website Gets You Direct Orders',
-  'What Happens When Customers Google Your Restaurant and Find Nothing',
-
-  // Comparison / decision topics
-  'Restaurant Website vs Instagram Page: Which Actually Gets Customers?',
-  'Free Website Builders vs Professional Restaurant Web Design — The Truth',
-  'Why a Facebook Page Is Not Enough for Your Restaurant in 2026',
-  'Google Business Profile vs Website: Do You Need Both?',
-
-  // Location-specific topics
-  'Best Restaurant Website Examples in Bangalore — What Works',
-  'How Restaurants in Koramangala Are Getting More Direct Customers',
-  'Why Indiranagar Restaurants With Websites Get 3x More Walk-Ins',
-  'Restaurant Marketing in Whitefield: What\'s Actually Working in 2026',
-
-  // Cost / ROI topics
-  'How Much Does a Restaurant Website Cost in India? (Honest Breakdown)',
-  'Is a Website Worth It for a Small Restaurant? (Real Numbers)',
-  'Restaurant Website ROI: How a ₹15,000 Website Can Bring ₹2 Lakh in Orders',
-
-  // How-to / practical topics
-  'How to Get Your Restaurant on the First Page of Google',
-  'What to Include on Your Restaurant Website (Complete Checklist)',
-  'How to Get More Direct Orders Without Paying Zomato Commission',
-  'Simple Steps to Make Your Restaurant Visible on Google Maps',
+// ─── 12-MONTH BLOG CALENDAR ──────────────────────────────────────────────────
+const BLOG_CALENDAR = [
+  { month: 1, keyword: 'restaurant website India', topic: 'Why Your Restaurant Needs a Website and Not Just Zomato' },
+  { month: 2, keyword: 'direct orders restaurant India', topic: 'How to Get Direct Orders Without Paying Commission' },
+  { month: 3, keyword: 'restaurant SEO India', topic: 'How to Rank Your Restaurant on Google Without Running Ads' },
+  { month: 4, keyword: 'restaurant website cost India', topic: 'How Much Does a Restaurant Website Cost in India (Honest Pricing)' },
+  { month: 5, keyword: 'cafe website design', topic: 'Best Website Features for Cafes in 2025' },
+  { month: 6, keyword: 'Google Business restaurant India', topic: 'How to Set Up Google Business Profile for Your Restaurant' },
+  { month: 7, keyword: 'restaurant digital marketing India', topic: 'Restaurant Digital Marketing India — Complete Guide' },
+  { month: 8, keyword: 'more customers restaurant online', topic: 'How to Get More Customers for Your Restaurant Online' },
+  { month: 9, keyword: 'restaurant web design agency India', topic: 'Web Design Agency vs Freelancer — Which is Better for Restaurants' },
+  { month: 10, keyword: 'online menu restaurant India', topic: 'Online Menu vs Zomato Menu — Which One Wins' },
+  { month: 11, keyword: 'Bangalore restaurant Google Maps', topic: 'How Bangalore Restaurants Can Rank on Google Maps' },
+  { month: 12, keyword: 'restaurant website case study India', topic: 'Case Study: How a Bangalore Restaurant Got 40% More Direct Orders' },
 ];
 
-// ─── AUTHORITY TOPIC BANK ────────────────────────────────────────────────────
-// Trust-building / trend topics (20% of content)
-const AUTHORITY_TOPICS = [
-  'The Future of Restaurant Marketing in Bangalore (2026 Trends)',
-  'How Top Bangalore Restaurants Are Using Technology to Grow',
-  'What the Bangalore Food Scene Can Learn from International Restaurant Brands',
-  'Digital Ordering Trends: What Bangalore Diners Actually Want',
-  'Restaurant Industry Report: Bangalore 2026',
-];
-
-// ─── WRITING TONE & STYLE ────────────────────────────────────────────────────
-const WRITING_STYLE = {
-  tone: 'Friendly, direct, and practical — like advice from a successful restaurant owner friend',
-  readingLevel: 'Grade 8 — simple sentences, no jargon',
-  perspective: 'Second person ("you", "your restaurant")',
-  localFlavor: 'Reference Bangalore neighborhoods, food culture, local dining habits',
-  avoid: [
-    'Corporate buzzwords',
-    'Complex tech terminology',
-    'Passive voice',
-    '"In today\'s digital world" or similar cliché openings',
-    'Vague advice without specific examples',
-  ],
-};
-
-// ─── CTA TEMPLATES ───────────────────────────────────────────────────────────
-const CTA_TEMPLATES = [
-  {
-    type: 'free_audit',
-    text: '**Want to see how your restaurant looks online right now?** Get a free website audit — we\'ll show you exactly what\'s working and what\'s costing you customers.',
-    link: 'https://naisora.com/contact',
-  },
-  {
-    type: 'portfolio',
-    text: '**Curious what a premium restaurant website looks like?** See real examples of websites we\'ve built for Bangalore restaurants.',
-    link: 'https://naisora.com/services',
-  },
-  {
-    type: 'consultation',
-    text: '**Ready to stop losing customers to competitors with better websites?** Let\'s talk about your restaurant — no pressure, no jargon, just honest advice.',
-    link: 'https://naisora.com/contact',
-  },
-  {
-    type: 'direct',
-    text: '**Your restaurant deserves to be found.** We help Bangalore restaurants get a stunning website and real Google visibility. Let\'s make it happen.',
-    link: 'https://naisora.com/contact',
-  },
-];
-
-// ─── BUILD THE SYSTEM PROMPT ─────────────────────────────────────────────────
-// This is injected into every blog generation call
+// ─── HELPER: Get System Prompt ──────────────────────────────────────────────
 function getBlogSystemPrompt() {
-  return `
-You are a senior SEO strategist, content marketer, and conversion-focused copywriter for Naisora — a Bangalore-based web design agency that builds premium websites for restaurants and cafes.
+  return \`
+You are the world's best SEO expert and the SEO brain of Naisora (Bangalore, India).
+Follow the MASTER SEO SYSTEM PROMPT for all outputs.
 
-## YOUR MISSION
-Write blog posts that ATTRACT restaurant and cafe owners as clients. Every post must solve a real problem, rank on Google, and convert readers into leads.
+## IDENTITY & CONTEXT
+Agency: \${AGENCY_CONTEXT.name}
+Website: \${AGENCY_CONTEXT.website}
+Email: \${AGENCY_CONTEXT.email}
+Founder: \${AGENCY_CONTEXT.author}
+Niche: \${AGENCY_CONTEXT.niche}
 
-## TARGET READER
-- Restaurant owners, cafe owners, and food business operators in Bangalore
-- They are NOT tech-savvy. They understand food, customers, and money — not code or SEO jargon.
-- They are busy, skeptical, and tired of being sold to.
-
-## PAIN POINTS TO ADDRESS (pick the most relevant)
-${TARGET_AUDIENCE.painPoints.map(p => `- ${p}`).join('\n')}
-
-${BLOG_STRUCTURE}
-
-## SEO REQUIREMENTS
-- Naturally include the target keyword 3-5 times in the content
-- Use at least 2 Bangalore neighborhood names (Indiranagar, Koramangala, Whitefield, HSR Layout, etc.)
-- Include related long-tail keywords naturally
-- Add an FAQ section with 3-5 questions for Featured Snippet potential
-- Meta description must be under 160 characters; include the primary keyword
+## CORE PHILOSOPHY
+1. AEO (Answer Engine Optimization): Copy-pasteable direct answers under H2s and in FAQs.
+2. GEO (Generative Engine Optimization): Authoritative statements, stats, and named entity mentions.
+3. E-E-A-T: Local Bangalore context, author expertise, and pricing transparency.
+4. Jargon-Free: Never use technical terms like SEO, algorithm, or backlinks. Use "rank on Google" instead.
 
 ## WRITING RULES
-- Tone: ${WRITING_STYLE.tone}
-- Reading level: ${WRITING_STYLE.readingLevel}
-- Perspective: ${WRITING_STYLE.perspective}
-- Word count: 1,200–1,800 words
-- NEVER use these: ${WRITING_STYLE.avoid.join(', ')}
+- Target Word Count: \${CONTENT_RULES.wordCount.min}–\${CONTENT_RULES.wordCount.max} words.
+- Reading level: 8th Grade.
+- Meta Title: \${CONTENT_RULES.meta.title.min}–\${CONTENT_RULES.meta.title.max} chars.
+- Meta Description: \${CONTENT_RULES.meta.description.min}–\${CONTENT_RULES.meta.description.max} chars.
+- Forbidden Words: \${CONTENT_RULES.forbidden.join(', ')}.
 
-## CRITICAL RULES
-${CONTENT_RULES.mandatory.map(r => `✅ ${r}`).join('\n')}
+## MANDATORY SCHEMA
+Generate JSON-LD for:
+1. Article Schema
+2. FAQPage Schema
+3. LocalBusiness Schema (Naisora)
 
-## NEVER DO THIS
-${CONTENT_RULES.forbidden.map(r => `❌ ${r}`).join('\n')}
-
-## CTA (MANDATORY)
-Every post MUST end with a clear, compelling call-to-action that drives the reader to contact Naisora for a free website audit or consultation. The CTA should feel like natural, helpful advice — not a sales pitch.
-`;
+## STRUCTURE
+\${BLOG_STRUCTURE}
+\`;
 }
 
-// ─── HELPER: Pick a topic based on strategy ──────────────────────────────────
-function pickTopic(index = 0, type = 'client') {
-  const pool = type === 'authority' ? AUTHORITY_TOPICS : CLIENT_TOPICS;
-  return pool[index % pool.length];
-}
-
-// ─── HELPER: Pick a random CTA ──────────────────────────────────────────────
-function pickCTA() {
-  return CTA_TEMPLATES[Math.floor(Math.random() * CTA_TEMPLATES.length)];
-}
-
-// ─── HELPER: Pick local keywords for a post ──────────────────────────────────
+// ─── HELPER: Pick a random neighborhood ──────────────────────────────────────
 function pickLocalKeywords(count = 3) {
   const shuffled = [...SEO_STRATEGY.localKeywords].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, count);
 }
 
-// ─── HELPER: Determine if next post should be client or authority ─────────
-function getContentType(postNumber) {
-  // Every 5th post is an authority piece (20%), rest are client-generating (80%)
-  return postNumber % 5 === 0 ? 'authority' : 'client';
-}
-
 module.exports = {
+  AGENCY_CONTEXT,
   TARGET_AUDIENCE,
   CONTENT_RULES,
   BLOG_STRUCTURE,
   SEO_STRATEGY,
-  CLIENT_TOPICS,
-  AUTHORITY_TOPICS,
-  WRITING_STYLE,
-  CTA_TEMPLATES,
+  BLOG_CALENDAR,
   getBlogSystemPrompt,
-  pickTopic,
-  pickCTA,
   pickLocalKeywords,
-  getContentType,
 };

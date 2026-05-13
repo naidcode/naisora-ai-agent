@@ -187,10 +187,19 @@ function startAllJobs() {
     });
     const { getReadyLeads } = require('../modules/scraper/leadDeduplicator');
     await getReadyLeads(rawLeads);
-    await scrapeEmailsForLeads(30);
+    
+    // Enrich with emails immediately (Problem 1)
+    await scrapeEmailsForLeads(100); 
+    
+    // Immediate Outreach same day (Problem 2)
+    console.log('🚀 Triggering immediate outreach for new leads...');
+    await sendDailyWhatsApp(); 
+    await sendDailyColdEmails();
+    
     await auditWarmLeads(10);
+    await sendDailyOutreachTargetReport(); // Report final status for the day
   }), { timezone: 'Asia/Kolkata' });
-  console.log('✅ 04:00 PM — Scraper, Email Scraper & SEO Audit');
+  console.log('✅ 04:00 PM — Scraper, Email Scraper, SEO Audit & Same-day Outreach');
 
   // 7. WEEKLY SUNDAY REPORT — 8:00 PM
   // cron.schedule('0 20 * * 0', safeJob('Weekly Sunday Report', async () => {

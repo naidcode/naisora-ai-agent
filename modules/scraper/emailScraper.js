@@ -163,7 +163,7 @@ async function scrapeEmailFromZomato(page, businessName, area) {
 }
 
 // ─── Main: scrape emails for all leads with websites ─────────────────────────
-async function scrapeEmailsForLeads(limit = 50) {
+async function scrapeEmailsForLeads(limit = 100) {
   console.log('\n╔══════════════════════════════════════════════╗');
   console.log('║     NAISORA — Email Scraper                  ║');
   console.log('╚══════════════════════════════════════════════╝');
@@ -222,7 +222,14 @@ async function scrapeEmailsForLeads(limit = 50) {
         console.log(`✅ Email found: ${email}`);
         found++;
       } else {
-        console.log(`⚠️ No email found for ${lead.website}`);
+        console.log(`⚠️ No email found for ${lead.website} — marking as no_email`);
+        
+        // Mark as no_email so we don't keep trying
+        await supabase
+          .from('leads')
+          .update({ email: 'no_email' })
+          .eq('id', lead.id);
+          
         notFound++;
       }
 

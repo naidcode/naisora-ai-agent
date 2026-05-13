@@ -71,8 +71,8 @@ async function sendDailyColdEmails() {
       }
     }
 
-    if (!emailAddress) {
-      console.log(`⚠️  Skipping ${lead.business_name} (no email found after search)`);
+    if (!emailAddress || emailAddress === 'no_email') {
+      console.log(`⚠️  Skipping ${lead.business_name} (no valid email found)`);
       skippedNoEmail++;
       continue;
     }

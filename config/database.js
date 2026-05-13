@@ -88,6 +88,7 @@ async function getNewLeads(limit = 50) {
     .select('*')
     .eq('outreach_status', STATUS.NEW)
     .not('email', 'is', null)
+    .neq('email', 'no_email')
     .limit(limit)
     .order('created_at', { ascending: true });
 

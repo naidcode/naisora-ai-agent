@@ -95,23 +95,50 @@ async function sendFollowUpMessage(lead, followupStage) {
 async function runFollowUpEngine() {
   console.log('\n🔄 [FollowUpEngine] Checking who needs follow-up today...');
 
+  // FIX 1: Startup delay
+  await new Promise(r => setTimeout(r, 3000));
+
+  // FIX 2: fetchWithRetry helper
+  async function fetchWithRetry(queryFn, label, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const { data, error } = await queryFn();
+        if (error) throw new Error(error.message);
+        return data || [];
+      } catch (err) {
+        console.log(`⚠ ${label} retry ${i+1}/3: ${err.message}`);
+        if (i === retries - 1) {
+          console.error(`❌ ${label} failed after 3 retries`);
+          return []; // return empty, don't crash
+        }
+        await new Promise(r => setTimeout(r, 5000 * (i + 1)));
+      }
+    }
+  }
+
   const now = new Date();
   let sent = 0;
   let skipped = 0;
+  let totalFetched = 0;
 
   for (const [stage, config] of Object.entries(FOLLOWUP_SCHEDULE)) {
     const cutoffDate = new Date(now - config.daysAfter * 24 * 60 * 60 * 1000);
     const dayBefore = new Date(cutoffDate - 24 * 60 * 60 * 1000);
 
     // Find leads that were last contacted exactly N days ago and haven't replied
-    const { data: leads } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('outreach_status', config.daysAfter === 2 ? 'contacted' : `followup_${config.daysAfter === 4 ? 1 : 2}`)
-      .lt('last_contacted_at', cutoffDate.toISOString())
-      .gte('last_contacted_at', dayBefore.toISOString())
-      .not('phone', 'is', null)
-      .limit(20);
+    const leads = await fetchWithRetry(
+      () => supabase
+        .from('leads')
+        .select('*')
+        .eq('outreach_status', config.daysAfter === 2 ? 'contacted' : `followup_${config.daysAfter === 4 ? 1 : 2}`)
+        .lt('last_contacted_at', cutoffDate.toISOString())
+        .gte('last_contacted_at', dayBefore.toISOString())
+        .not('phone', 'is', null)
+        .limit(20),
+      `${config.label} leads`
+    );
+
+    totalFetched += leads.length;
 
     if (!leads || leads.length === 0) {
       console.log(`   ${config.label}: No leads due`);
@@ -126,6 +153,12 @@ async function runFollowUpEngine() {
       // Small delay between messages
       await new Promise(r => setTimeout(r, 10000)); // 10 seconds
     }
+  }
+
+  // FIX 3: If totalFetched is 0, send Telegram alert (Supabase might be down or DNS issues)
+  if (totalFetched === 0) {
+    await sendTelegram('⚠️ No leads fetched in followUpEngine — Supabase may be slow or DNS issues persist. Skipping follow-ups.');
+    return { sent: 0, skipped: 0 };
   }
 
   console.log(`\n✅ [FollowUpEngine] Done — ${sent} sent, ${skipped} failed`);
